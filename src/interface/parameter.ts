@@ -1,5 +1,7 @@
 export interface Parameter {
     name: string;
-    comment: string;
+    comments: string;
     type: string;
+    size?: number;
+    signedness?: string;
 }

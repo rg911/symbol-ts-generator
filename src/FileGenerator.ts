@@ -1,10 +1,11 @@
-import * as LineReader from 'n-readlines';
+import { ClassGenerator } from './ClassGenerator';
 import { EnumGenerator } from './EnumGenerator';
 import { GeneratorBase } from './GeneratorBase';
 import { Helper } from './Helper';
 import { Schema } from './interface/schema';
 import path = require('path');
 import fs = require('fs');
+import LineByLine = require('n-readlines');
 
 export class FileGenerator extends GeneratorBase {
     private licenseHeader: string[];
@@ -17,14 +18,16 @@ export class FileGenerator extends GeneratorBase {
         this.licenseHeader = this.getLicense();
     }
 
+    /**
+     * Generate file
+     */
     public generate(): void {
         this.schema.forEach((item) => {
             const filename = this.getGeneratedFileName(item);
             if (Helper.isEnum(item.type)) {
-                const enumLines = new EnumGenerator(item, this.schema).generate();
-                this.writeToFile(filename, enumLines);
+                this.writeToFile(filename, new EnumGenerator(item, this.schema).generate());
             } else {
-                // call class generator
+                this.writeToFile(filename, new ClassGenerator(item, this.schema).generate());
             }
             //this.writeToFile(filename, fileContent);
         });
@@ -44,8 +47,8 @@ export class FileGenerator extends GeneratorBase {
      * @param fileContent - existing generated file content
      */
     private getLicense(): string[] {
-        const lines = new LineReader(path.join(__dirname, './HEADER.inc'));
-        let line: string;
+        const lines = new LineByLine(path.join(__dirname, './HEADER.inc'));
+        let line: false | Buffer;
         const licenseLines: string[] = [];
         while ((line = lines.next())) {
             licenseLines.push(line.toString());
@@ -53,6 +56,11 @@ export class FileGenerator extends GeneratorBase {
         return licenseLines;
     }
 
+    /**
+     * Write content into file
+     * @param fileName - filename
+     * @param fileContent - file content
+     */
     private writeToFile(fileName: string, fileContent: string[]): void {
         const writeStream = fs.createWriteStream(path.join(__dirname, `/build/${fileName}`));
         this.licenseHeader.forEach((line) => writeStream.write(`${line}\n`));

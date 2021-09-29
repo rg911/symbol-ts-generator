@@ -25,12 +25,25 @@ export class GeneratorBase {
     }
 
     /**
+     * Generate class header
+     * @param schema - schema definition
+     * @returns generated class header definition
+     */
+    protected getClassHeader(schema: Schema): string[] {
+        const generatedLines: string[] = [];
+        const classType = Helper.isEnum(schema.type) ? 'enum' : 'class';
+        Helper.writeLines(this.generateComment(schema.comments ? schema.comments : schema.name), generatedLines);
+        Helper.writeLines(`export ${classType} ${schema.name} {`, generatedLines);
+        return generatedLines;
+    }
+
+    /**
      * Try wrap comment if it exceeds max line length (140)
      * @param comment - Comment line
      * @param indentCount - Line indentation count
      * @returns Wrapped comment lines
      */
-    private wrapComment(comment: string, indentCount = 0): string[] {
+    public wrapComment(comment: string, indentCount = 0): string[] {
         // sensitize comment string to replace the '\' with '*'
         comment = comment.replace('\\', '*');
         const chunkSize = 137;
@@ -39,7 +52,7 @@ export class GeneratorBase {
             //Keep the whole word when wrapping
             const chopIndex = comment.length > chunkSize ? comment.lastIndexOf(' ') : chunkSize;
             chunks.push(Helper.indent(' * ' + comment.substring(0, chopIndex), indentCount));
-            comment = comment.substring(chopIndex - 1);
+            comment = comment.substring(chopIndex + 1);
         }
         return chunks;
     }

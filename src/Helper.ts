@@ -9,9 +9,14 @@ export class Helper {
      * @returns camel case string
      */
     public static toCamel(value: string): string {
-        return value.replace(/([-_][a-z])/gi, ($1) => {
-            return $1.toUpperCase().replace('-', '').replace('_', '');
-        });
+        return value
+            .replace(/\s(.)/g, function ($1) {
+                return $1.toUpperCase();
+            })
+            .replace(/\s/g, '')
+            .replace(/^(.)/, function ($1) {
+                return $1.toLowerCase();
+            });
     }
 
     /**
@@ -139,6 +144,61 @@ export class Helper {
         lines.push(...instructions);
         if (newLineAfter) {
             lines.push('');
+        }
+    }
+
+    /**
+     * Convert byte type to typescript type
+     * @param size - byte size
+     * @returns typescript type
+     */
+    public static convertByteType(size?: number): string {
+        if (size === undefined) {
+            return 'Uint8Array';
+        } else if (size < 8) {
+            return 'number';
+        } else if (size === 8) {
+            return 'bigint';
+        } else {
+            return 'Uint8Array';
+        }
+    }
+
+    public static getDeserializeUtilMethodByType(type: string, argName: string, size?: number): string {
+        switch (type) {
+            case 'Uint8Array':
+                return `Utils.getBytes(Uint8Array.from(${argName}), ${size});`;
+            case 'number':
+                if (size === 1) {
+                    return `Utils.bufferToUint8(Uint8Array.from(${argName}));`;
+                } else if (size === 2) {
+                    return `Utils.bufferToUint16(Uint8Array.from(${argName}));`;
+                } else {
+                    return `Utils.bufferToUint32(Uint8Array.from(${argName}));`;
+                }
+            case 'bigint':
+                return `Utils.bufferToBigInt(Uint8Array.from(${argName}));`;
+            default:
+                return `${type}.deserialize(Uint8Array.from(${argName}));`;
+        }
+    }
+
+    public static getSerializeUtilMethodByType(type: string, name: string, size?: number): string {
+        switch (type) {
+            case 'Uint8Array':
+                return `this.${name};`;
+            case 'number':
+                if (size === 1) {
+                    return `Utils.uint8ToBuffer(this.${name});`;
+                } else if (size === 2) {
+                    return `Utils.uint16ToBuffer(this.${name});`;
+                } else {
+                    return `Utils.uint32ToBuffer(this.${name});`;
+                }
+            case 'bigint':
+                return `Utils.bigIntToBuffer(this.${name});`;
+            default:
+                return `${type}.deserialize(this.${name});`;
         }
     }
 }
