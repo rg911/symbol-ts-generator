@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { Serializer } from './Serializer';
+
 /**
  * Generator utility class.
  */
@@ -253,5 +255,124 @@ export class Utils {
      */
     public static fromUint(number: number | bigint): bigint {
         return BigInt(number);
+    }
+    /**
+     * It loads a static list of entities from the payload
+     * @param loadFromBinary - the factory function
+     * @param payload - the payload
+     * @param count - the amount of entities
+     */
+    public static loadFromBinary<T extends Serializer>(
+        loadFromBinary: (payload: Uint8Array) => T,
+        payload: Uint8Array,
+        count: number | bigint,
+    ): T[] {
+        const byteArray = Array.from(payload);
+        const values: T[] = [];
+        for (let i = 0; i < Utils.compact(count); i++) {
+            const item = loadFromBinary(Uint8Array.from(byteArray));
+            const itemSize = item.size;
+            values.push(item);
+            byteArray.splice(0, itemSize);
+        }
+        return values;
+    }
+
+    /**
+     * Loads a list of numbers from the array based on the count and number size.
+     * @param payload - the payload
+     * @param count - the count
+     * @param itemSize - the number size.
+     */
+    public static loadFromBinaryEnums(payload: Uint8Array, count: number | bigint, itemSize: number): number[] {
+        const byteArray = Array.from(payload);
+        const values: number[] = [];
+        for (let i = 0; i < Utils.compact(count); i++) {
+            values.push(Utils.bufferToUint(payload, 2));
+            byteArray.splice(0, itemSize);
+        }
+        return values;
+    }
+
+    /**
+     * It loads a static list of entities from the payload
+     * @param loadFromBinary - the factory function
+     * @param payload - the payload
+     * @param payloadSize - the amount of bytes to process.
+     * @param alignment - for the padding
+     */
+    public static loadFromBinaryRemaining<T extends Serializer>(
+        loadFromBinary: (payload: Uint8Array) => T,
+        payload: Uint8Array,
+        payloadSize: number,
+        alignment: number,
+    ): T[] {
+        const byteArray = Array.from(payload);
+        let remainingByteSizes: number = payloadSize;
+        const transactions: T[] = [];
+        while (remainingByteSizes > 0) {
+            const item = loadFromBinary(Uint8Array.from(byteArray));
+            transactions.push(item);
+            const size = item.size;
+            const itemSize = size + Utils.getPaddingSize(item.size, alignment);
+            remainingByteSizes -= itemSize;
+            byteArray.splice(0, itemSize);
+        }
+        return transactions;
+    }
+
+    /**
+     * It converts a list of buffers into an Uint8Array
+     * @param elements - the buffers to serialize
+     * @param alignment - add padding to each element according to the alignment.
+     * @returns the serialized buffer
+     */
+    public static writeList(elements: Serializer[], alignment: number): Uint8Array {
+        return elements.reduce((newArray, item) => {
+            const byte = item.serialize();
+            const padding = new Uint8Array(Utils.getPaddingSize(byte.length, alignment));
+            return Utils.concatTypedArrays(newArray, Utils.concatTypedArrays(byte, padding));
+        }, Uint8Array.from([]));
+    }
+
+    /**
+     * It serializes a list of number to a Uint8Array
+     * @param elements - elements
+     * @param alignment - alignment
+     */
+    public static writeListEnum(elements: number[], alignment: number): Uint8Array {
+        return elements.reduce((newArray, item) => {
+            const byte = Utils.uint16ToBuffer(item);
+            const padding = new Uint8Array(Utils.getPaddingSize(byte.length, alignment));
+            return Utils.concatTypedArrays(newArray, Utils.concatTypedArrays(byte, padding));
+        }, Uint8Array.from([]));
+    }
+
+    /**
+     * It generates a list of flags from an aggregated value
+     *
+     * @param enumClass - the enum class holding all the possible values
+     * @param bitMaskValue - the aggregate value
+     * @param the - flags
+     */
+    public static toFlags(enumClass: never, bitMaskValue: number): number[] {
+        const values: number[] = Object.keys(enumClass)
+            .map((key) => enumClass[key])
+            .filter((k) => parseInt(k) >= 0)
+            .map((k) => parseInt(k));
+        return values.filter((value) => (value & bitMaskValue) !== 0);
+    }
+
+    /**
+     * It converts a list of flag into an aggregated number
+     * @param enumClass - the enum class to know the valid numbers
+     * @param flags - the flags
+     */
+    public static fromFlags(enumClass: never, flags: number[]): number {
+        const values: number[] = Object.keys(enumClass)
+            .map((key) => enumClass[key])
+            .filter((k) => parseInt(k) >= 0)
+            .map((k) => parseInt(k));
+        return flags.filter((f) => values.indexOf(f) > -1).reduce((a, b) => a + b, 0);
     }
 }

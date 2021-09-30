@@ -33,7 +33,7 @@ export class GeneratorBase {
         const generatedLines: string[] = [];
         const classType = Helper.isEnum(schema.type) ? 'enum' : 'class';
         Helper.writeLines(this.generateComment(schema.comments ? schema.comments : schema.name), generatedLines);
-        Helper.writeLines(`export ${classType} ${schema.name} {`, generatedLines);
+        Helper.writeLines(`export ${classType} ${schema.name} implements Serializer {`, generatedLines);
         return generatedLines;
     }
 

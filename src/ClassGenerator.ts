@@ -20,7 +20,7 @@ export class ClassGenerator extends GeneratorBase {
         this.generatedLines = [];
         this.methodGenerator = new MethodGenerator(classSchema, schema);
         this.classParameters = this.parseClassParameters();
-        this.importList = ['Utils'];
+        this.importList = ['Utils', 'Serializer'];
     }
 
     /**
