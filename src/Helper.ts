@@ -16,6 +16,9 @@ export class Helper {
             .replace(/\s/g, '')
             .replace(/^(.)/, function ($1) {
                 return $1.toLowerCase();
+            })
+            .replace(/([-_][a-z])/gi, ($1) => {
+                return $1.toUpperCase().replace('-', '').replace('_', '');
             });
     }
 
@@ -79,7 +82,7 @@ export class Helper {
      * @returns true if layout attribute is reserved
      */
     public static isReserved(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.reserved.valueOf();
+        return layout.disposition !== undefined && layout.disposition === DispositionType.Reserved.valueOf();
     }
 
     /**
@@ -88,7 +91,7 @@ export class Helper {
      * @returns true if layout attribute is fill array
      */
     public static isFillArray(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.FillArray.valueOf();
+        return layout.disposition !== undefined && layout.disposition === DispositionType.ArrayFill.valueOf();
     }
 
     /**
@@ -200,5 +203,35 @@ export class Helper {
             default:
                 return `${type}.deserialize(this.${name});`;
         }
+    }
+
+    /**
+     * Detect and add import names to a list
+     * @param importList - existing import list
+     * @param type - type
+     * @param name - name
+     */
+    public static addRequiredImport(importList: string[], type: string, name: string): void {
+        if (type !== name && !Helper.isByte(type) && !['Uint8Array', 'number'].includes(type)) {
+            importList.push(type);
+        }
+    }
+
+    /**
+     * Should generate class or not
+     * @param name - class name
+     * @returns should generate class or not
+     */
+    public static shouldGenerateClass(name: string): boolean {
+        return !['SizePrefixedEntity', 'VerifiableEntity'].includes(name);
+    }
+
+    /**
+     * Should declare variable or not
+     * @param name - variable name
+     * @returns should declare variable or not
+     */
+    public static shouldDeclareVariable(name: string): boolean {
+        return name !== 'size' && name.lastIndexOf('_reserved') < 0;
     }
 }

@@ -23,13 +23,14 @@ export class FileGenerator extends GeneratorBase {
      */
     public generate(): void {
         this.schema.forEach((item) => {
-            const filename = this.getGeneratedFileName(item);
-            if (Helper.isEnum(item.type)) {
-                this.writeToFile(filename, new EnumGenerator(item, this.schema).generate());
-            } else {
-                this.writeToFile(filename, new ClassGenerator(item, this.schema).generate());
+            if (Helper.shouldGenerateClass(item.name)) {
+                const filename = this.getGeneratedFileName(item);
+                if (Helper.isEnum(item.type)) {
+                    this.writeToFile(filename, new EnumGenerator(item, this.schema).generate());
+                } else {
+                    this.writeToFile(filename, new ClassGenerator(item, this.schema).generate());
+                }
             }
-            //this.writeToFile(filename, fileContent);
         });
     }
 

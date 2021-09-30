@@ -17,9 +17,11 @@ export class MethodGenerator extends GeneratorBase {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Constructor', 1, this.getParamCommentLines(params)), generatedLines);
         Helper.writeLines(Helper.indent(`constructor(${this.getParamTypeLine(params)}) {`, 1), generatedLines);
-        params.forEach((param) => {
-            Helper.writeLines(Helper.indent(`this.${param.name} = ${param.name};`, 2), generatedLines);
-        });
+        params
+            .filter((param) => param.declarable)
+            .forEach((param) => {
+                Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
+            });
         Helper.writeLines(Helper.indent(`}`, 1), generatedLines, true);
         return generatedLines;
     }
@@ -29,11 +31,11 @@ export class MethodGenerator extends GeneratorBase {
         Helper.writeLines(this.generateComment('Gets the size of the object', 1, [], 'Size in bytes'), generatedLines);
         Helper.writeLines(Helper.indent(`public get size(): number {`, 1), generatedLines);
         if (params.length === 1) {
-            Helper.writeLines(Helper.indent(`return ${params[0].size};`, 2), generatedLines);
+            Helper.writeLines(Helper.indent(`return ${params[0].paramSize};`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`let size = 0;`, 2), generatedLines);
             params.forEach((param) => {
-                Helper.writeLines(Helper.indent(`this.${param.name} = ${param.name};`, 2), generatedLines);
+                Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
             });
         }
         Helper.writeLines(Helper.indent(`}`, 1), generatedLines, true);
@@ -54,7 +56,7 @@ export class MethodGenerator extends GeneratorBase {
         Helper.writeLines(Helper.indent(`public static deserialize(payload: Uint8Array): ${this.classSchema.name} {`, 1), generatedLines);
         Helper.writeLines(this.getParamDeserializeLines(params), generatedLines);
         Helper.writeLines(
-            Helper.indent(`return new ${this.classSchema.name}(${params.map((p) => Helper.toCamel(p.name)).join(', ')});`, 2),
+            Helper.indent(`return new ${this.classSchema.name}(${params.map((p) => Helper.toCamel(p.paramName)).join(', ')});`, 2),
             generatedLines,
         );
         Helper.writeLines(Helper.indent(`}`, 1), generatedLines, true);
@@ -72,17 +74,21 @@ export class MethodGenerator extends GeneratorBase {
 
     private getParamCommentLines(params: Parameter[]): string[] {
         const lines: string[] = [];
-        params.forEach((param) => {
-            Helper.writeLines(this.wrapComment(`@param ${param.name} - ${param.comments}`, 1), lines);
-        });
+        params
+            .filter((param) => param.declarable)
+            .forEach((param) => {
+                Helper.writeLines(this.wrapComment(`@param ${param.paramName} - ${param.comments}`, 1), lines);
+            });
         return lines;
     }
 
     private getParamTypeLine(params: Parameter[]): string {
-        const paramTypePair = params.map((param) => {
-            const convertedType = param.type;
-            return `${param.name}: ${convertedType}`;
-        });
+        const paramTypePair = params
+            .filter((param) => param.declarable)
+            .map((param) => {
+                const convertedType = param.type;
+                return `${param.paramName}: ${convertedType}`;
+            });
 
         return paramTypePair.join(', ');
     }
@@ -90,8 +96,8 @@ export class MethodGenerator extends GeneratorBase {
     private getParamDeserializeLines(params: Parameter[]): string[] {
         const lines: string[] = [];
         if (params.length === 1) {
-            const method = Helper.getDeserializeUtilMethodByType(params[0].type, 'payload', params[0].size);
-            Helper.writeLines(Helper.indent(`const ${params[0].name} = ${method}`, 2), lines);
+            const method = Helper.getDeserializeUtilMethodByType(params[0].type, 'payload', params[0].paramSize);
+            Helper.writeLines(Helper.indent(`const ${params[0].paramName} = ${method}`, 2), lines);
         }
         return lines;
     }
@@ -99,7 +105,7 @@ export class MethodGenerator extends GeneratorBase {
     private getParamSerializeLines(params: Parameter[]): string[] {
         const lines: string[] = [];
         if (params.length === 1) {
-            const method = Helper.getSerializeUtilMethodByType(params[0].type, params[0].name, params[0].size);
+            const method = Helper.getSerializeUtilMethodByType(params[0].type, params[0].paramName, params[0].paramSize);
             Helper.writeLines(Helper.indent(`return ${method}`, 2), lines);
         }
         return lines;

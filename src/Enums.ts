@@ -8,6 +8,7 @@ export enum DispositionType {
     Inline = 'inline',
     Const = 'const',
     Array = 'array',
-    FillArray = 'array fill',
-    reserved = 'reserved',
+    ArrayFill = 'array fill',
+    ArraySized = 'array sized',
+    Reserved = 'reserved',
 }

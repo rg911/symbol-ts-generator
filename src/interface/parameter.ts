@@ -1,7 +1,8 @@
-export interface Parameter {
-    name: string;
-    comments: string;
+import { Layout } from './layout';
+
+export interface Parameter extends Layout {
+    paramName: string;
     type: string;
-    size?: number;
-    signedness?: string;
+    paramSize?: number;
+    declarable: boolean;
 }
