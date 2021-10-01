@@ -259,19 +259,19 @@ export class Utils {
     }
     /**
      * It loads a static list of entities from the payload
-     * @param loadFromBinary - the factory function
+     * @param deserialize - the factory function
      * @param payload - the payload
      * @param count - the amount of entities
      */
-    public static loadFromBinary<T extends Serializer>(
-        loadFromBinary: (payload: Uint8Array) => T,
+    public static deserialize<T extends Serializer>(
+        deserialize: (payload: Uint8Array) => T,
         payload: Uint8Array,
         count: number | bigint,
     ): T[] {
         const byteArray = Array.from(payload);
         const values: T[] = [];
         for (let i = 0; i < Utils.compact(count); i++) {
-            const item = loadFromBinary(Uint8Array.from(byteArray));
+            const item = deserialize(Uint8Array.from(byteArray));
             const itemSize = item.size;
             values.push(item);
             byteArray.splice(0, itemSize);
@@ -285,7 +285,7 @@ export class Utils {
      * @param count - the count
      * @param itemSize - the number size.
      */
-    public static loadFromBinaryEnums(payload: Uint8Array, count: number | bigint, itemSize: number): number[] {
+    public static deserializeEnums(payload: Uint8Array, count: number | bigint, itemSize: number): number[] {
         const byteArray = Array.from(payload);
         const values: number[] = [];
         for (let i = 0; i < Utils.compact(count); i++) {
@@ -297,13 +297,13 @@ export class Utils {
 
     /**
      * It loads a static list of entities from the payload
-     * @param loadFromBinary - the factory function
+     * @param deserialize - the factory function
      * @param payload - the payload
      * @param payloadSize - the amount of bytes to process.
      * @param alignment - for the padding
      */
-    public static loadFromBinaryRemaining<T extends Serializer>(
-        loadFromBinary: (payload: Uint8Array) => T,
+    public static deserializeRemaining<T extends Serializer>(
+        deserialize: (payload: Uint8Array) => T,
         payload: Uint8Array,
         payloadSize: number,
         alignment: number,
@@ -312,7 +312,7 @@ export class Utils {
         let remainingByteSizes: number = payloadSize;
         const transactions: T[] = [];
         while (remainingByteSizes > 0) {
-            const item = loadFromBinary(Uint8Array.from(byteArray));
+            const item = deserialize(Uint8Array.from(byteArray));
             transactions.push(item);
             const size = item.size;
             const itemSize = size + Utils.getPaddingSize(item.size, alignment);

@@ -138,6 +138,14 @@ export class Helper {
     }
 
     /**
+     * Return base type of an array
+     * @param arrayType - param array type
+     */
+    public static getArrayKind(arrayType: string): string {
+        return arrayType.replace('[', '').replace(']', '');
+    }
+
+    /**
      * Apply indentation of an input text line
      * @param instruction - input text line
      * @param indentCount - indentation count
@@ -191,10 +199,12 @@ export class Helper {
     }
 
     public static getDeserializeUtilMethodByType(type: string, argName: string, size?: number): string {
+        type = Helper.getArrayKind(type);
         switch (type) {
             case 'Uint8Array':
                 return `Utils.getBytes(Uint8Array.from(${argName}), ${size});`;
             case 'number':
+            case 'enum':
                 if (size === 1) {
                     return `Utils.bufferToUint8(Uint8Array.from(${argName}));`;
                 } else if (size === 2) {
@@ -205,12 +215,15 @@ export class Helper {
             case 'bigint':
                 return `Utils.bufferToBigInt(Uint8Array.from(${argName}));`;
             default:
+                if (type.endsWith('Flags')) {
+                    return `Utils.toFlags(${type}, Utils.bufferToUint8(Uint8Array.from(byteArray)));`;
+                }
                 return `${type}.deserialize(Uint8Array.from(${argName}));`;
         }
     }
 
     public static getSerializeUtilMethodByType(type: string, name: string, size?: number, disposition?: string): string {
-        type = type.replace('[', '').replace(']', '');
+        type = Helper.getArrayKind(type);
         switch (type) {
             case 'Uint8Array':
                 return `${name};`;
@@ -225,6 +238,8 @@ export class Helper {
                 }
             case 'bigint':
                 return `Utils.bigIntToBuffer(${name});`;
+            case 'enumArray':
+                return `Utils.writeListEnum(${name}, 0);`;
             default:
                 if (Helper.isArrayDisposition(disposition)) {
                     return `Utils.writeList(${name}, 0);`;
@@ -245,7 +260,7 @@ export class Helper {
     public static addRequiredImport(importList: string[], type: string, name: string): void {
         if (type !== name && !Helper.isByte(type) && !['Uint8Array', 'number', 'bigint'].includes(type)) {
             if (!importList.includes(type)) {
-                importList.push(type.replace('[', '').replace(']', ''));
+                importList.push(Helper.getArrayKind(type));
             }
         }
     }
