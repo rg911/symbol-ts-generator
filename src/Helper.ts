@@ -152,19 +152,30 @@ export class Helper {
 
     /**
      * Convert byte type to typescript type
-     * @param size - byte size
+     * @param type - schema type
+     * @param size - schema size
      * @returns typescript type
      */
-    public static convertByteType(size?: number): string {
-        if (size === undefined) {
-            return 'Uint8Array';
-        } else if (size < 8) {
-            return 'number';
-        } else if (size === 8) {
-            return 'bigint';
-        } else {
-            return 'Uint8Array';
+    public static getGeneratedType(type: string, size?: number, disposition?: string): string {
+        if (Helper.isByte(type)) {
+            if (size === undefined) {
+                return 'Uint8Array';
+            } else if (size < 8) {
+                return 'number';
+            } else if (size === 8) {
+                return 'bigint';
+            } else {
+                return 'Uint8Array';
+            }
         }
+        const arrayType = ['array', 'array fill', 'array sized'];
+        if (arrayType.includes(type) || type.endsWith('Flags')) {
+            return `${type}[]`;
+        }
+        if (disposition && (arrayType.includes(disposition) || disposition.endsWith('Flags'))) {
+            return `${type}[]`;
+        }
+        return type;
     }
 
     public static getDeserializeUtilMethodByType(type: string, argName: string, size?: number): string {
@@ -212,8 +223,10 @@ export class Helper {
      * @param name - name
      */
     public static addRequiredImport(importList: string[], type: string, name: string): void {
-        if (type !== name && !Helper.isByte(type) && !['Uint8Array', 'number'].includes(type)) {
-            importList.push(type);
+        if (type !== name && !Helper.isByte(type) && !['Uint8Array', 'number', 'bigint'].includes(type)) {
+            if (!importList.includes(type)) {
+                importList.push(type.replace('[', '').replace(']', ''));
+            }
         }
     }
 
@@ -232,6 +245,6 @@ export class Helper {
      * @returns should declare variable or not
      */
     public static shouldDeclareVariable(name: string): boolean {
-        return name !== 'size' && name.lastIndexOf('_reserved') < 0;
+        return !(name === 'size' || name.indexOf('_reserved') > -1 || name.endsWith('_count') || name.endsWith('_size'));
     }
 }

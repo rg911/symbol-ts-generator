@@ -16,12 +16,27 @@ export class MethodGenerator extends GeneratorBase {
     public generateConstructor(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Constructor', 1, this.getParamCommentLines(params)), generatedLines);
-        Helper.writeLines(Helper.indent(`constructor(${this.getParamTypeLine(params)}) {`, 1), generatedLines);
+        if (params.length === 1) {
+            Helper.writeLines(Helper.indent(`constructor(${params[0].paramName}: ${params[0].type}) {`, 1), generatedLines);
+        } else {
+            Helper.writeLines(
+                this.wrapMethodDeclarationLines(
+                    Helper.indent('constructor({ ', 1),
+                    params
+                        .filter((param) => param.declarable)
+                        .map((param) => param.paramName)
+                        .join(', '),
+                    ` }: ${this.classSchema.name}Params) {`,
+                ),
+                generatedLines,
+            );
+        }
         params
             .filter((param) => param.declarable)
             .forEach((param) => {
                 Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
             });
+
         Helper.writeLines(Helper.indent(`}`, 1), generatedLines, true);
         return generatedLines;
     }
@@ -30,14 +45,7 @@ export class MethodGenerator extends GeneratorBase {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Gets the size of the object', 1, [], 'Size in bytes'), generatedLines);
         Helper.writeLines(Helper.indent(`public get size(): number {`, 1), generatedLines);
-        if (params.length === 1) {
-            Helper.writeLines(Helper.indent(`return ${params[0].paramSize};`, 2), generatedLines);
-        } else {
-            Helper.writeLines(Helper.indent(`let size = 0;`, 2), generatedLines);
-            params.forEach((param) => {
-                Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
-            });
-        }
+        Helper.writeLines(this.getGetterLines(params), generatedLines);
         Helper.writeLines(Helper.indent(`}`, 1), generatedLines, true);
         return generatedLines;
     }
@@ -82,15 +90,29 @@ export class MethodGenerator extends GeneratorBase {
         return lines;
     }
 
-    private getParamTypeLine(params: Parameter[]): string {
-        const paramTypePair = params
-            .filter((param) => param.declarable)
-            .map((param) => {
-                const convertedType = param.type;
-                return `${param.paramName}: ${convertedType}`;
+    private getGetterLines(params: Parameter[]): string[] {
+        const generatedLines: string[] = [];
+        if (params.length === 1) {
+            Helper.writeLines(Helper.indent(`return ${params[0].paramSize};`, 2), generatedLines);
+        } else {
+            Helper.writeLines(Helper.indent(`let size = 0;`, 2), generatedLines);
+            let sizeLine = '';
+            params.forEach((param) => {
+                if (!param.paramSize) {
+                    if (Helper.shouldGenerateClass(param.type)) {
+                        sizeLine = `this.${param.paramName}${param.condition ? '!' : ''}.size`;
+                    }
+                } else {
+                    sizeLine = param.paramSize.toString();
+                }
+                Helper.writeLines(
+                    this.addConditionAndArray(param, params, `size += ${sizeLine}; // ${param.paramName};`, 2),
+                    generatedLines,
+                );
             });
-
-        return paramTypePair.join(', ');
+            Helper.writeLines(Helper.indent(`return size;`, 2), generatedLines);
+        }
+        return generatedLines;
     }
 
     private getParamDeserializeLines(params: Parameter[]): string[] {
@@ -109,5 +131,52 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`return ${method}`, 2), lines);
         }
         return lines;
+    }
+
+    private addConditionAndArray(param: Parameter, params: Parameter[], instruction: string, indentCount: number): string[] {
+        const lines: string[] = [];
+        if (param.condition) {
+            const conditionType = params
+                .find((condition) => condition.name && condition.name === param.condition)
+                ?.type.replace('[', '')
+                .replace(']', '');
+            let conditionLine = '';
+            if (param.condition_operation === 'in') {
+                conditionLine = `if (this.${Helper.toCamel(param.condition ?? '')}.indexOf(${conditionType}.${
+                    param.condition_value
+                }) > -1) {`;
+            } else {
+                conditionLine = `if (this.${Helper.toCamel(param.condition ?? '')} === ${conditionType}.${param.condition_value}) {`;
+            }
+
+            Helper.writeLines(Helper.indent(conditionLine, indentCount), lines);
+            Helper.writeLines(Helper.indent(instruction, indentCount + 1), lines);
+            Helper.writeLines(Helper.indent('}', indentCount), lines);
+        } else if (param.disposition && ['array', 'array fill', 'array sized'].includes(param.disposition)) {
+            const sizeMethod = param.element_disposition
+                ? '.length;'
+                : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0);';
+            const line = `size += this.${Helper.toCamel(param.name ?? '')}${sizeMethod}`;
+            Helper.writeLines(Helper.indent(line, indentCount), lines);
+        } else {
+            Helper.writeLines(Helper.indent(instruction, indentCount), lines);
+        }
+        return lines;
+    }
+
+    private wrapMethodDeclarationLines(prefix: string, body: string, suffix: string): string[] {
+        const generatedLines: string[] = [];
+        const singleLine = prefix + body + suffix;
+        if (singleLine.length > 140) {
+            Helper.writeLines(prefix.trimEnd(), generatedLines);
+            Helper.writeLines(
+                body.split(', ').map((line) => Helper.indent(line + ',', 2)),
+                generatedLines,
+            );
+            Helper.writeLines(Helper.indent(suffix.trim(), 1), generatedLines);
+        } else {
+            generatedLines.push(singleLine);
+        }
+        return generatedLines;
     }
 }

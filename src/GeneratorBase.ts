@@ -1,4 +1,5 @@
 import { Helper } from './Helper';
+import { Layout } from './interface/layout';
 import { Schema } from './interface/schema';
 export class GeneratorBase {
     constructor(public readonly schema: Schema[]) {}
@@ -33,7 +34,10 @@ export class GeneratorBase {
         const generatedLines: string[] = [];
         const classType = Helper.isEnum(schema.type) ? 'enum' : 'class';
         Helper.writeLines(this.generateComment(schema.comments ? schema.comments : schema.name), generatedLines);
-        Helper.writeLines(`export ${classType} ${schema.name} implements Serializer {`, generatedLines);
+        Helper.writeLines(
+            `export ${classType} ${schema.name}${Helper.isEnum(classType) ? '' : ' implements Serializer'} {`,
+            generatedLines,
+        );
         return generatedLines;
     }
 
@@ -55,5 +59,22 @@ export class GeneratorBase {
             comment = comment.substring(chopIndex + 1);
         }
         return chunks;
+    }
+
+    /**
+     * Get the actual size of a type
+     * @param layout - schema layout
+     * @returns actual size of a type
+     */
+    public getRealLayoutSize(layout: Layout): number | undefined {
+        if (layout.size && typeof layout.size === 'number') {
+            return layout.size;
+        } else {
+            const schema = this.schema.find((schema) => schema.name === layout.type);
+            if (schema) {
+                return schema && Helper.isEnum(schema.type) ? schema.size : undefined;
+            }
+            return undefined;
+        }
     }
 }

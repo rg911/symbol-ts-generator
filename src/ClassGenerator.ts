@@ -30,8 +30,9 @@ export class ClassGenerator extends GeneratorBase {
      */
     public generate(): string[] {
         Helper.writeLines(this.generateImports(), this.generatedLines, true);
+        this.generateParameterInterface();
         Helper.writeLines(this.getClassHeader(this.classSchema), this.generatedLines);
-        Helper.writeLines(this.generatePublicVariables(), this.generatedLines);
+        this.generatePublicVariables();
         Helper.writeLines(this.methodGenerator.generateConstructor(this.classParameters), this.generatedLines);
         Helper.writeLines(this.methodGenerator.generateDeserializer(this.classParameters), this.generatedLines);
         Helper.writeLines(this.methodGenerator.generateSizeGetter(this.classParameters), this.generatedLines);
@@ -44,16 +45,8 @@ export class ClassGenerator extends GeneratorBase {
      * Generate a list of public variable declaration statements
      * @returns list of public variables
      */
-    private generatePublicVariables(): string[] {
-        const generatedLines: string[] = [];
-        this.classParameters.forEach((param) => {
-            if (param.declarable) {
-                Helper.writeLines(this.generateComment(param.comments, 1), generatedLines);
-                Helper.writeLines(Helper.indent(`public readonly ${param.paramName}: ${param.type};`, 1), generatedLines);
-            }
-        });
-        Helper.writeLines('', generatedLines);
-        return generatedLines;
+    private generatePublicVariables(): void {
+        Helper.writeLines(this.generateParamTypePairLine('public readonly '), this.generatedLines, true);
     }
 
     /**
@@ -78,7 +71,7 @@ export class ClassGenerator extends GeneratorBase {
         Helper.addRequiredImport(this.importList, this.classSchema.type, this.classSchema.name);
         return {
             paramName: Helper.toCamel(this.classSchema.name),
-            type: Helper.isByte(schemaType) ? Helper.convertByteType(this.classSchema.size) : schemaType,
+            type: Helper.getGeneratedType(schemaType, this.classSchema.size),
             comments: this.classSchema.comments ? this.classSchema.comments : this.classSchema.name,
             paramSize: this.classSchema.size,
             declarable: true,
@@ -93,12 +86,17 @@ export class ClassGenerator extends GeneratorBase {
         const params: Parameter[] = [];
         this.classSchema.layout.forEach((layout) => {
             const paramName = Helper.toCamel(layout.name ? layout.name : '');
-            const paramSize = typeof layout.size === 'string' ? undefined : layout.size;
+            const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
             layout.comments = layout.comments ? layout.comments : paramName;
 
             if (!layout.disposition) {
-                layout.type = Helper.isByte(layout.type) ? Helper.convertByteType(paramSize) : layout.type;
-                params.push({ paramName, paramSize, declarable: true, ...layout });
+                layout.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);
+                params.push({
+                    paramName,
+                    paramSize,
+                    declarable: Helper.shouldDeclareVariable(layout.name ?? ''),
+                    ...layout,
+                });
                 Helper.addRequiredImport(this.importList, layout.type, paramName);
             } else {
                 this.parseDispositionParam(layout, params);
@@ -108,34 +106,35 @@ export class ClassGenerator extends GeneratorBase {
     }
 
     private parseDispositionParam(layout: Layout, params: Parameter[]) {
-        if (Helper.isInline(layout)) {
-            if (!Helper.shouldGenerateClass(layout.type)) {
-                const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
-                layouts?.forEach((ignoredParam) => {
-                    const paramSize = typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size;
-                    const type = Helper.isByte(ignoredParam.type) ? Helper.convertByteType(paramSize) : ignoredParam.type;
-                    const paramName = Helper.toCamel(ignoredParam.name ? ignoredParam.name : '');
-                    params.push({
-                        paramName,
-                        type,
-                        comments: ignoredParam.comments,
-                        paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-                        declarable: false,
-                    });
-                });
-            } else {
-                const paramName = Helper.toCamel(layout.name ? layout.name : layout.type);
-                const paramSize = typeof layout.size === 'string' ? undefined : layout.size;
-                layout.comments = layout.comments ? layout.comments : paramName;
-                Helper.addRequiredImport(this.importList, layout.type, paramName);
-                params.push({
-                    paramName: Helper.toCamel(paramName),
-                    type: Helper.isByte(layout.type) ? Helper.convertByteType(paramSize) : layout.type,
-                    comments: layout.comments ? layout.comments : paramName,
-                    paramSize: typeof layout.size === 'string' ? undefined : layout.size,
-                    declarable: true,
-                });
-            }
+        if (Helper.isInline(layout) && !Helper.shouldGenerateClass(layout.type)) {
+            const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
+            layouts?.forEach((ignoredParam) => {
+                const paramSize = typeof ignoredParam.size === 'string' ? undefined : this.getRealLayoutSize(ignoredParam);
+                const paramName = Helper.toCamel(ignoredParam.name ? ignoredParam.name : '');
+                const param = {
+                    paramName,
+                    paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
+                    declarable: Helper.shouldDeclareVariable(layout.name ?? ''),
+                    ...ignoredParam,
+                };
+                param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
+                param.comments = ignoredParam.comments;
+                params.push(param);
+            });
+        } else {
+            const paramName = Helper.toCamel(layout.name ? layout.name : layout.type);
+            const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
+            layout.comments = layout.comments ? layout.comments : paramName;
+            Helper.addRequiredImport(this.importList, layout.type, paramName);
+            const param = {
+                paramName: Helper.toCamel(paramName),
+                paramSize,
+                declarable: Helper.shouldDeclareVariable(layout.name ?? ''),
+                ...layout,
+            };
+            param.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);
+            param.comments = layout.comments ? layout.comments : paramName;
+            params.push(param);
         }
     }
 
@@ -151,5 +150,30 @@ export class ClassGenerator extends GeneratorBase {
                 lines.push(`import { ${item} } from './${item}';`);
             });
         return lines;
+    }
+
+    private generateParameterInterface(): void {
+        if (this.classParameters.length > 1) {
+            Helper.writeLines(this.generateComment(`Interface to create instances of ${this.classSchema.name}`, 0), this.generatedLines);
+            Helper.writeLines(`export interface ${this.classSchema.name}Params {`, this.generatedLines);
+            Helper.writeLines(this.generateParamTypePairLine(''), this.generatedLines);
+            Helper.writeLines('}', this.generatedLines, true);
+        }
+    }
+
+    private generateParamTypePairLine(prefix: string): string[] {
+        const generatedLines: string[] = [];
+        this.classParameters
+            .filter((param) => param.declarable)
+            .forEach((param) => {
+                if (param.declarable) {
+                    Helper.writeLines(this.generateComment(param.comments, 1), generatedLines);
+                    Helper.writeLines(
+                        Helper.indent(`${prefix}${param.paramName}${param.condition ? '?' : ''}: ${param.type};`, 1),
+                        generatedLines,
+                    );
+                }
+            });
+        return generatedLines;
     }
 }
