@@ -80,6 +80,7 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    //#region Private Methods
     private getParamCommentLines(params: Parameter[]): string[] {
         const lines: string[] = [];
         params
@@ -105,10 +106,13 @@ export class MethodGenerator extends GeneratorBase {
                 } else {
                     sizeLine = param.paramSize.toString();
                 }
-                Helper.writeLines(
-                    this.addConditionAndArray(param, params, `size += ${sizeLine}; // ${param.paramName};`, 2),
-                    generatedLines,
-                );
+                if (Helper.isArrayDisposition(param.disposition)) {
+                    const sizeMethod = param.element_disposition
+                        ? '.length'
+                        : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0)';
+                    sizeLine = `this.${Helper.toCamel(param.name ?? '')}${sizeMethod}`;
+                }
+                Helper.writeLines(this.applyCondition(param, params, [`size += ${sizeLine}; // ${param.paramName};`], 2), generatedLines);
             });
             Helper.writeLines(Helper.indent(`return size;`, 2), generatedLines);
         }
@@ -125,15 +129,37 @@ export class MethodGenerator extends GeneratorBase {
     }
 
     private getParamSerializeLines(params: Parameter[]): string[] {
-        const lines: string[] = [];
+        const generatedLines: string[] = [];
         if (params.length === 1) {
-            const method = Helper.getSerializeUtilMethodByType(params[0].type, params[0].paramName, params[0].paramSize);
-            Helper.writeLines(Helper.indent(`return ${method}`, 2), lines);
+            const method = Helper.getSerializeUtilMethodByType(params[0].type, 'this.' + params[0].paramName, params[0].paramSize);
+            Helper.writeLines(Helper.indent(`return ${method}`, 2), generatedLines);
+        } else {
+            Helper.writeLines(Helper.indent(`let newArray = new Uint8Array();`, 2), generatedLines);
+            params.forEach((param) => {
+                const bodyLines: string[] = [];
+                // Handle size / count
+                let name = `this.${param.paramName}${param.condition ? '!' : ''}`.replace('Size', '.length').replace('Count', '.length');
+                // Handle reserved field
+                if (param.disposition && param.disposition === 'reserved') {
+                    name = param.value as string;
+                }
+                // Handle enum
+                let type = param.type;
+                const parentSchema = this.schema.find((schema) => schema.name === param.type);
+                if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                    type = 'enum';
+                }
+                const method = Helper.getSerializeUtilMethodByType(type, name, param.paramSize, param.disposition);
+                Helper.writeLines(`const ${param.paramName}Bytes = ${method}`, bodyLines);
+                Helper.writeLines(`newArray = Utils.concatTypedArrays(newArray, ${param.paramName}Bytes);`, bodyLines);
+                Helper.writeLines(this.applyCondition(param, params, bodyLines, 2), generatedLines);
+            });
+            Helper.writeLines(Helper.indent(`return newArray;`, 2), generatedLines);
         }
-        return lines;
+        return generatedLines;
     }
 
-    private addConditionAndArray(param: Parameter, params: Parameter[], instruction: string, indentCount: number): string[] {
+    private applyCondition(param: Parameter, params: Parameter[], bodyLines: string[], indentCount: number): string[] {
         const lines: string[] = [];
         if (param.condition) {
             const conditionType = params
@@ -150,16 +176,15 @@ export class MethodGenerator extends GeneratorBase {
             }
 
             Helper.writeLines(Helper.indent(conditionLine, indentCount), lines);
-            Helper.writeLines(Helper.indent(instruction, indentCount + 1), lines);
+            bodyLines.forEach((line) => {
+                Helper.writeLines(Helper.indent(line, indentCount + 1), lines);
+            });
+
             Helper.writeLines(Helper.indent('}', indentCount), lines);
-        } else if (param.disposition && ['array', 'array fill', 'array sized'].includes(param.disposition)) {
-            const sizeMethod = param.element_disposition
-                ? '.length;'
-                : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0);';
-            const line = `size += this.${Helper.toCamel(param.name ?? '')}${sizeMethod}`;
-            Helper.writeLines(Helper.indent(line, indentCount), lines);
         } else {
-            Helper.writeLines(Helper.indent(instruction, indentCount), lines);
+            bodyLines.forEach((line) => {
+                Helper.writeLines(Helper.indent(line, indentCount), lines);
+            });
         }
         return lines;
     }
@@ -179,4 +204,5 @@ export class MethodGenerator extends GeneratorBase {
         }
         return generatedLines;
     }
+    //#endregion Private Methods
 }

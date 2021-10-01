@@ -88,7 +88,6 @@ export class ClassGenerator extends GeneratorBase {
             const paramName = Helper.toCamel(layout.name ? layout.name : '');
             const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
             layout.comments = layout.comments ? layout.comments : paramName;
-
             if (!layout.disposition) {
                 layout.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);
                 params.push({

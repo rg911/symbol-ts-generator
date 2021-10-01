@@ -126,6 +126,18 @@ export class Helper {
     }
 
     /**
+     * Return true is disposition is an array type
+     * @param disposition -  disposition
+     * @returns disposition is an array
+     */
+    public static isArrayDisposition(disposition?: string): boolean {
+        if (disposition && ['array', 'array fill', 'array sized'].includes(disposition)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Apply indentation of an input text line
      * @param instruction - input text line
      * @param indentCount - indentation count
@@ -197,22 +209,30 @@ export class Helper {
         }
     }
 
-    public static getSerializeUtilMethodByType(type: string, name: string, size?: number): string {
+    public static getSerializeUtilMethodByType(type: string, name: string, size?: number, disposition?: string): string {
+        type = type.replace('[', '').replace(']', '');
         switch (type) {
             case 'Uint8Array':
-                return `this.${name};`;
+                return `${name};`;
             case 'number':
+            case 'enum':
                 if (size === 1) {
-                    return `Utils.uint8ToBuffer(this.${name});`;
+                    return `Utils.uint8ToBuffer(${name});`;
                 } else if (size === 2) {
-                    return `Utils.uint16ToBuffer(this.${name});`;
+                    return `Utils.uint16ToBuffer(${name});`;
                 } else {
-                    return `Utils.uint32ToBuffer(this.${name});`;
+                    return `Utils.uint32ToBuffer(${name});`;
                 }
             case 'bigint':
-                return `Utils.bigIntToBuffer(this.${name});`;
+                return `Utils.bigIntToBuffer(${name});`;
             default:
-                return `${type}.deserialize(this.${name});`;
+                if (Helper.isArrayDisposition(disposition)) {
+                    return `Utils.writeList(${name}, 0);`;
+                }
+                if (type.endsWith('Flags')) {
+                    return `Utils.uint8ToBuffer(Utils.fromFlags(${type}, ${name}));`;
+                }
+                return `${name}.serialize();`;
         }
     }
 

@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Serializer } from './Serializer';
 
 /**
@@ -103,7 +104,7 @@ export class Utils {
      * @param value - the value
      * @param message - the message in the exception if the value is null or undefined.
      */
-    public static notNull(value: never, message: string): void {
+    public static notNull(value: any, message: string): void {
         if (value === undefined || value === null) {
             throw new Error(message);
         }
@@ -355,7 +356,7 @@ export class Utils {
      * @param bitMaskValue - the aggregate value
      * @param the - flags
      */
-    public static toFlags(enumClass: never, bitMaskValue: number): number[] {
+    public static toFlags(enumClass: any, bitMaskValue: number): number[] {
         const values: number[] = Object.keys(enumClass)
             .map((key) => enumClass[key])
             .filter((k) => parseInt(k) >= 0)
@@ -368,7 +369,7 @@ export class Utils {
      * @param enumClass - the enum class to know the valid numbers
      * @param flags - the flags
      */
-    public static fromFlags(enumClass: never, flags: number[]): number {
+    public static fromFlags(enumClass: any, flags: number[]): number {
         const values: number[] = Object.keys(enumClass)
             .map((key) => enumClass[key])
             .filter((k) => parseInt(k) >= 0)
