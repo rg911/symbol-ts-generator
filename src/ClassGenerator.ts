@@ -46,6 +46,7 @@ export class ClassGenerator extends GeneratorBase {
      * @returns list of public variables
      */
     private generatePublicVariables(): void {
+        this.generateConstant();
         Helper.writeLines(this.generateParamTypePairLine('public readonly '), this.generatedLines, true);
     }
 
@@ -85,7 +86,8 @@ export class ClassGenerator extends GeneratorBase {
     private generateLayoutClassParams(): Parameter[] {
         const params: Parameter[] = [];
         this.classSchema.layout.forEach((layout) => {
-            const paramName = Helper.toCamel(layout.name ? layout.name : '');
+            layout.name = layout.name ? layout.name : '';
+            const paramName = Helper.isConst(layout) ? layout.name : Helper.toCamel(layout.name);
             const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
             layout.comments = layout.comments ? layout.comments : paramName;
             if (!layout.disposition) {
@@ -93,7 +95,7 @@ export class ClassGenerator extends GeneratorBase {
                 params.push({
                     paramName,
                     paramSize,
-                    declarable: Helper.shouldDeclareVariable(layout.name ?? ''),
+                    declarable: Helper.shouldDeclareVariable(layout.name, Helper.isConst(layout)),
                     ...layout,
                 });
                 Helper.addRequiredImport(this.importList, layout.type, paramName);
@@ -113,7 +115,7 @@ export class ClassGenerator extends GeneratorBase {
                 const param = {
                     paramName,
                     paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-                    declarable: Helper.shouldDeclareVariable(layout.name ?? ''),
+                    declarable: Helper.shouldDeclareVariable(layout.name ?? '', Helper.isConst(layout)),
                     ...ignoredParam,
                 };
                 param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
@@ -121,19 +123,23 @@ export class ClassGenerator extends GeneratorBase {
                 params.push(param);
             });
         } else {
-            const paramName = Helper.toCamel(layout.name ? layout.name : layout.type);
+            layout.name = layout.name ? layout.name : layout.type;
+            const isConst = Helper.isConst(layout);
+            const paramName = isConst ? layout.name : Helper.toCamel(layout.name);
             const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
             layout.comments = layout.comments ? layout.comments : paramName;
-            Helper.addRequiredImport(this.importList, layout.type, paramName);
             const param = {
-                paramName: Helper.toCamel(paramName),
+                paramName: paramName,
                 paramSize,
-                declarable: Helper.shouldDeclareVariable(layout.name ?? ''),
+                declarable: Helper.shouldDeclareVariable(layout.name, isConst),
                 ...layout,
             };
             param.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);
             param.comments = layout.comments ? layout.comments : paramName;
             params.push(param);
+            if (!isConst) {
+                Helper.addRequiredImport(this.importList, layout.type, paramName);
+            }
         }
     }
 
@@ -174,5 +180,18 @@ export class ClassGenerator extends GeneratorBase {
                 }
             });
         return generatedLines;
+    }
+
+    private generateConstant(): void {
+        this.classParameters
+            .filter((param) => Helper.isConst(param))
+            .forEach((param) => {
+                const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
+                if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                    param.value = parentSchema.values.find((value) => value.name === param.value)?.value;
+                }
+                Helper.writeLines(this.generateComment(param.comments, 1), this.generatedLines);
+                Helper.writeLines(Helper.indent(`public readonly ${param.paramName} = ${param.value};`, 1), this.generatedLines);
+            });
     }
 }

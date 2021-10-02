@@ -143,8 +143,9 @@ export class MethodGenerator extends GeneratorBase {
 
     private getParamDeserializeLines(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
+        let argument = 'Uint8Array.from(payload)';
         if (params.length === 1) {
-            const method = Helper.getDeserializeUtilMethodByType(params[0].type, 'payload', params[0].paramSize);
+            const method = Helper.getDeserializeUtilMethodByType(params[0].type, argument, params[0].paramSize);
             Helper.writeLines(Helper.indent(`const ${params[0].paramName} = ${method}`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`const byteArray = Array.from(payload);`, 2), generatedLines);
@@ -157,25 +158,45 @@ export class MethodGenerator extends GeneratorBase {
                 if (parentSchema && Helper.isEnum(parentSchema.type)) {
                     type = 'enum';
                 }
-                const method = Helper.getDeserializeUtilMethodByType(type, 'byteArray', param.paramSize);
+                argument = 'Uint8Array.from(byteArray)';
+                const method = Helper.getDeserializeUtilMethodByType(type, argument, param.paramSize);
                 //Handle array
-                let bodyLine = `${param.condition ? '' : 'const '}${param.paramName} = ${method}`;
-                if (param.disposition && param.disposition === 'reserved') {
-                    bodyLine = method;
+                let bodyLine = [`${param.condition ? '' : 'const '}${param.paramName} = ${method}`];
+                if ((param.disposition && param.disposition === 'reserved') || Helper.isConst(param)) {
+                    bodyLine = [method];
                 }
                 if (Helper.isArrayDisposition(param.disposition)) {
                     let reduceLine = `${param.paramName}.reduce((sum, c) => sum + c.size, 0),`;
-                    if (param.size && typeof param.size === 'string') {
-                        const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
-                        if (parentSchema && Helper.isEnum(parentSchema.type)) {
-                            bodyLine = `const ${param.paramName} = Utils.deserializeEnums(Uint8Array.from(byteArray), ${Helper.toCamel(
-                                param.size,
-                            )}, ${parentSchema.size});`;
-                            reduceLine = `${param.paramName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
+                    if (Helper.isFillArray(param)) {
+                        bodyLine = [`const ${param.paramName} = Utils.deserializeRemaining(`];
+                        bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
+                        bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                        bodyLine.push(Helper.indent('byteArray.length,', 1));
+                        bodyLine.push(Helper.indent('0,', 1));
+                        bodyLine.push(');');
+                        reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0),`;
+                    } else if (param.size && typeof param.size === 'string') {
+                        if (param.type === 'Uint8Array') {
+                            bodyLine = [
+                                `const ${param.paramName} = Utils.getBytes(Uint8Array.from(byteArray), ${Helper.toCamel(param.size)});`,
+                            ];
+                            reduceLine = `${Helper.toCamel(param.size)},`;
                         } else {
-                            bodyLine = `const ${param.paramName} = Utils.deserialize(${Helper.getArrayKind(
-                                param.type,
-                            )}.deserialize, Uint8Array.from(byteArray), ${Helper.toCamel(param.size)});`;
+                            const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
+                            if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                                bodyLine = [`const ${param.paramName} = Utils.deserializeEnums(`];
+                                bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                                bodyLine.push(Helper.indent(`${Helper.toCamel(param.size)},`, 1));
+                                bodyLine.push(Helper.indent(`${parentSchema.size},`, 1));
+                                bodyLine.push(');');
+                                reduceLine = `${param.paramName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
+                            } else {
+                                bodyLine = [`const ${param.paramName} = Utils.deserialize(`];
+                                bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
+                                bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                                bodyLine.push(Helper.indent(`${Helper.toCamel(param.size)},`, 1));
+                                bodyLine.push(');');
+                            }
                         }
                     }
                     const arraySpliceLine: string[] = [];
@@ -203,12 +224,20 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`let newArray = new Uint8Array();`, 2), generatedLines);
             params.forEach((param) => {
                 const bodyLines: string[] = [];
-                // Handle size / count
                 let name = `this.${param.paramName}${param.condition ? '!' : ''}`.replace('Size', '.length').replace('Count', '.length');
-                // Handle reserved field
+                // // Handle reserved field
                 if (param.disposition && param.disposition === 'reserved') {
                     name = param.value as string;
                 }
+                // Handle size / count
+                if (param.name?.endsWith('_size') || param.name?.endsWith('_count')) {
+                    const parentParam = params.find((parent) => param.name && parent.size === param.name);
+
+                    if (parentParam) {
+                        name = `this.${parentParam.paramName}${param.condition ? '!' : ''}.length`;
+                    }
+                }
+
                 // Handle enum & array
                 let type = param.type;
                 const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));

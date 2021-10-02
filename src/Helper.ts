@@ -202,23 +202,23 @@ export class Helper {
         type = Helper.getArrayKind(type);
         switch (type) {
             case 'Uint8Array':
-                return `Utils.getBytes(Uint8Array.from(${argName}), ${size});`;
+                return `Utils.getBytes(${argName}, ${size});`;
             case 'number':
             case 'enum':
                 if (size === 1) {
-                    return `Utils.bufferToUint8(Uint8Array.from(${argName}));`;
+                    return `Utils.bufferToUint8(${argName});`;
                 } else if (size === 2) {
-                    return `Utils.bufferToUint16(Uint8Array.from(${argName}));`;
+                    return `Utils.bufferToUint16(${argName});`;
                 } else {
-                    return `Utils.bufferToUint32(Uint8Array.from(${argName}));`;
+                    return `Utils.bufferToUint32(${argName});`;
                 }
             case 'bigint':
-                return `Utils.bufferToBigInt(Uint8Array.from(${argName}));`;
+                return `Utils.bufferToBigInt(${argName});`;
             default:
                 if (type.endsWith('Flags')) {
-                    return `Utils.toFlags(${type}, Utils.bufferToUint8(Uint8Array.from(byteArray)));`;
+                    return `Utils.toFlags(${type}, Utils.bufferToUint8(${argName}));`;
                 }
-                return `${type}.deserialize(Uint8Array.from(${argName}));`;
+                return `${type}.deserialize(${argName});`;
         }
     }
 
@@ -277,9 +277,13 @@ export class Helper {
     /**
      * Should declare variable or not
      * @param name - variable name
+     * @param isConstant - variable is constant
      * @returns should declare variable or not
      */
-    public static shouldDeclareVariable(name: string): boolean {
+    public static shouldDeclareVariable(name: string, isConstant: boolean): boolean {
+        if (isConstant) {
+            return false;
+        }
         return !(name === 'size' || name.indexOf('_reserved') > -1 || name.endsWith('_count') || name.endsWith('_size'));
     }
 }
