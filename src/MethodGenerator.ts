@@ -13,6 +13,11 @@ export class MethodGenerator extends GeneratorBase {
         super(schema);
     }
 
+    /**
+     * Generate constructor
+     * @param params - parameter list
+     * @returns generated constructor lines
+     */
     public generateConstructor(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Constructor', 1, this.getParamCommentLines(params)), generatedLines);
@@ -42,6 +47,11 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Generate size getter
+     * @param params - parameter list
+     * @returns generated size getter lines
+     */
     public generateSizeGetter(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Gets the size of the object', 1, [], 'Size in bytes'), generatedLines);
@@ -51,6 +61,11 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Generate deserializer
+     * @param params - parameter list
+     * @returns generated deserializer lines
+     */
     public generateDeserializer(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(
@@ -87,6 +102,11 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Generate serializer
+     * @param params - parameter list
+     * @returns generated serializer lines
+     */
     public generateSerializer(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Serializes an object to bytes', 1, [], 'Serialized bytes'), generatedLines);
@@ -97,6 +117,11 @@ export class MethodGenerator extends GeneratorBase {
     }
 
     //#region Private Methods
+    /**
+     * Generate parameter comment line
+     * @param params - parameter list
+     * @returns generated comments
+     */
     private getParamCommentLines(params: Parameter[]): string[] {
         const lines: string[] = [];
         params
@@ -107,6 +132,11 @@ export class MethodGenerator extends GeneratorBase {
         return lines;
     }
 
+    /**
+     * Generate size getter lines
+     * @param params - parameter list
+     * @returns generated size getter lines
+     */
     private getGetterLines(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         if (params.length === 1) {
@@ -141,6 +171,11 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Generate deserializer lines
+     * @param params - param list
+     * @returns generated deserializer lines
+     */
     private getParamDeserializeLines(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         let argument = 'Uint8Array.from(payload)';
@@ -215,6 +250,11 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Generate serializer lines
+     * @param params - parameter list
+     * @returns generated serializer lines
+     */
     private getParamSerializeLines(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         if (params.length === 1) {
@@ -260,6 +300,16 @@ export class MethodGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Apply conditions
+     * @param param - condition param
+     * @param params - parameter list
+     * @param bodyLines - condition body lines
+     * @param indentCount - indentation count
+     * @param useLocal - is using local var
+     * @param declareUndefined - declare undefined var
+     * @returns generate condition lines
+     */
     private applyCondition(
         param: Parameter,
         params: Parameter[],
@@ -300,6 +350,14 @@ export class MethodGenerator extends GeneratorBase {
         return lines;
     }
 
+    /**
+     * Wrap declaration line if it is too long
+     * @param prefix - prefix
+     * @param body - body
+     * @param suffix - suffix
+     * @param baseIndentCount - parent indentation count
+     * @returns wrapped declaration lines
+     */
     private wrapMethodDeclarationLines(prefix: string, body: string, suffix: string, baseIndentCount: number): string[] {
         const generatedLines: string[] = [];
         const singleLine = prefix + body + suffix;

@@ -106,6 +106,11 @@ export class ClassGenerator extends GeneratorBase {
         return params;
     }
 
+    /**
+     * parse disposition type parameter
+     * @param layout - schema layout
+     * @param params - parameter list
+     */
     private parseDispositionParam(layout: Layout, params: Parameter[]) {
         if (Helper.isInline(layout) && !Helper.shouldGenerateClass(layout.type)) {
             const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
@@ -157,6 +162,9 @@ export class ClassGenerator extends GeneratorBase {
         return lines;
     }
 
+    /**
+     * Generate parameter interface
+     */
     private generateParameterInterface(): void {
         if (this.classParameters.length > 1) {
             Helper.writeLines(this.generateComment(`Interface to create instances of ${this.classSchema.name}`, 0), this.generatedLines);
@@ -166,6 +174,11 @@ export class ClassGenerator extends GeneratorBase {
         }
     }
 
+    /**
+     * Generate param - type pair declaration
+     * @param prefix - prefix of the declaration
+     * @returns lines of the declaration
+     */
     private generateParamTypePairLine(prefix: string): string[] {
         const generatedLines: string[] = [];
         this.classParameters
@@ -182,6 +195,9 @@ export class ClassGenerator extends GeneratorBase {
         return generatedLines;
     }
 
+    /**
+     * Generate constant parameter declaration line
+     */
     private generateConstant(): void {
         this.classParameters
             .filter((param) => Helper.isConst(param))

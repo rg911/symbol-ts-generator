@@ -12,14 +12,15 @@ export class FileGenerator extends GeneratorBase {
     /**
      * Constructor
      * @param schema - Schema list from catbuffer
+     * @param destination - destination folder
      */
-    constructor(schema: Schema[]) {
+    constructor(schema: Schema[], public readonly destination: string) {
         super(schema);
         this.licenseHeader = this.getLicense();
     }
 
     /**
-     * Generate file
+     * Generate files
      */
     public generate(): void {
         this.schema.forEach((item) => {
@@ -63,7 +64,7 @@ export class FileGenerator extends GeneratorBase {
      * @param fileContent - file content
      */
     private writeToFile(fileName: string, fileContent: string[]): void {
-        const writeStream = fs.createWriteStream(path.join(__dirname, `/build/${fileName}`));
+        const writeStream = fs.createWriteStream(path.join(__dirname, `${this.destination}/${fileName}`));
         this.licenseHeader.forEach((line) => writeStream.write(`${line}\n`));
         fileContent.forEach((line) => writeStream.write(`${line}\n`));
         writeStream.on('finish', () => {

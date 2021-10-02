@@ -198,6 +198,13 @@ export class Helper {
         return type;
     }
 
+    /**
+     * Get deserializer method name by type
+     * @param type - parameter type
+     * @param argName - argument name
+     * @param size - parameter size
+     * @returns deserializer method name
+     */
     public static getDeserializeUtilMethodByType(type: string, argName: string, size?: number): string {
         type = Helper.getArrayKind(type);
         switch (type) {
@@ -222,6 +229,14 @@ export class Helper {
         }
     }
 
+    /**
+     * Get serializer method by type
+     * @param type - param type
+     * @param name - param name
+     * @param size - param name
+     * @param disposition - param disposition
+     * @returns serializer method text
+     */
     public static getSerializeUtilMethodByType(type: string, name: string, size?: number, disposition?: string): string {
         type = Helper.getArrayKind(type);
         switch (type) {

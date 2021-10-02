@@ -4,20 +4,14 @@ import * as path from 'path';
 import { FileGenerator } from './src/FileGenerator';
 import { Schema } from './src/interface/schema';
 
-const filePath = path.join(__dirname, '/src/schema/symbol.yaml');
-//const result: Schema = {};
-const schema = YAML.load(fs.readFileSync(filePath, 'utf8')) as Schema[];
+const symbolPath = path.join(__dirname, '/src/schema/symbol.yaml');
+const symbolSchema = YAML.load(fs.readFileSync(symbolPath, 'utf8')) as Schema[];
 
-const fileGenerator = new FileGenerator(schema);
-fileGenerator.generate();
+const symbolGenerator = new FileGenerator(symbolSchema, '/build/symbol');
+symbolGenerator.generate();
 
-// const lockStatus = a.find((o) => o.name === 'SecretProofTransactionBody');
-// console.log(a);
-// console.log(lockStatus);
+const nemPath = path.join(__dirname, '/src/schema/nem.yaml');
+const nemSchema = YAML.load(fs.readFileSync(nemPath, 'utf8')) as Schema[];
 
-// schema.forEach((item) => {
-//     if (item.type === BuildInType.ENUM) {
-//         const classPath = `/output/${item.name}Enum.ts`;
-//         this.generateEnumClass(item, path.join(__dirname, classPath));
-//     }
-// });
+const nemGenerator = new FileGenerator(nemSchema, '/build/nem');
+nemGenerator.generate();
