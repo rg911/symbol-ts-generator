@@ -55,8 +55,7 @@ export class ClassGenerator extends GeneratorBase {
      * @returns parsed parameters
      */
     private parseClassParameters(): Parameter[] {
-        const layout = this.classSchema.layout;
-        if (layout && layout.length > 0) {
+        if (this.classSchema.layout) {
             return this.generateLayoutClassParams();
         } else {
             return [this.generateSimpleClassParams()];
@@ -87,7 +86,7 @@ export class ClassGenerator extends GeneratorBase {
         const params: Parameter[] = [];
         this.classSchema.layout.forEach((layout) => {
             layout.name = layout.name ? layout.name : '';
-            const paramName = Helper.isConst(layout) ? layout.name : Helper.toCamel(layout.name);
+            const paramName = Helper.isConst(layout) ? layout.name : Helper.toCamel(layout.name); // Keep const name as it is
             const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
             layout.comments = layout.comments ? layout.comments : paramName;
             if (!layout.disposition) {

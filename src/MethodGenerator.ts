@@ -21,6 +21,7 @@ export class MethodGenerator extends GeneratorBase {
     public generateConstructor(params: Parameter[]): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(this.generateComment('Constructor', 1, this.getParamCommentLines(params)), generatedLines);
+        // Constructor header
         if (params.length === 1) {
             Helper.writeLines(Helper.indent(`constructor(${params[0].paramName}: ${params[0].type}) {`, 1), generatedLines);
         } else {
@@ -37,6 +38,7 @@ export class MethodGenerator extends GeneratorBase {
                 generatedLines,
             );
         }
+        // Constructor params
         params
             .filter((param) => param.declarable)
             .forEach((param) => {
@@ -77,8 +79,11 @@ export class MethodGenerator extends GeneratorBase {
             ),
             generatedLines,
         );
+        // Deserializer header
         Helper.writeLines(Helper.indent(`public static deserialize(payload: Uint8Array): ${this.classSchema.name} {`, 1), generatedLines);
+        // Deserializer body
         Helper.writeLines(this.getParamDeserializeLines(params), generatedLines);
+        // Returns
         if (params.length == 1) {
             Helper.writeLines(
                 Helper.indent(`return new ${this.classSchema.name}(${params.map((p) => Helper.toCamel(p.paramName)).join(', ')});`, 2),
@@ -152,6 +157,7 @@ export class MethodGenerator extends GeneratorBase {
                 } else {
                     sizeLine = param.paramSize.toString();
                 }
+                // Handle arrays
                 if (Helper.isArrayDisposition(param.disposition)) {
                     let sizeMethod = param.element_disposition
                         ? '.length'
@@ -265,7 +271,7 @@ export class MethodGenerator extends GeneratorBase {
             params.forEach((param) => {
                 const bodyLines: string[] = [];
                 let name = `this.${param.paramName}${param.condition ? '!' : ''}`.replace('Size', '.length').replace('Count', '.length');
-                // // Handle reserved field
+                // Handle reserved field
                 if (param.disposition && param.disposition === 'reserved') {
                     name = param.value as string;
                 }
@@ -319,7 +325,7 @@ export class MethodGenerator extends GeneratorBase {
         declareUndefined = false,
     ): string[] {
         const lines: string[] = [];
-        const accessor = useLocal ? '' : 'this.';
+        const accessor = useLocal ? '' : 'this.'; // Use local/global var
         if (param.condition) {
             const conditionType = params
                 .find((condition) => condition.name && condition.name === param.condition)
@@ -340,7 +346,6 @@ export class MethodGenerator extends GeneratorBase {
             bodyLines.forEach((line) => {
                 Helper.writeLines(Helper.indent(line, indentCount + 1), lines);
             });
-
             Helper.writeLines(Helper.indent('}', indentCount), lines);
         } else {
             bodyLines.forEach((line) => {
