@@ -1,6 +1,6 @@
 {
-    "name": "#artifactName",
-    "version": "#artifactVersion",
+    "name": "symbol-typescript-generator",
+    "version": "0.0.1",
     "description": "symbol buffer generator",
     "repository": {
         "type": "git",

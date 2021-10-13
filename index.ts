@@ -5,15 +5,14 @@ import { FileGenerator } from './src/FileGenerator';
 import { Helper } from './src/Helper';
 import { Schema } from './src/interface/schema';
 
-const destinationPath = path.join(__dirname, '/build/src');
-const symbolDestination = destinationPath + '/symbol';
-const nemDestination = destinationPath + '/nem';
-if (!fs.existsSync(destinationPath)) {
-    fs.removeSync(destinationPath);
-    fs.ensureDirSync(destinationPath);
-    fs.ensureDirSync(symbolDestination);
-    fs.ensureDirSync(nemDestination);
-}
+const destinationPath = path.join(__dirname, '/build');
+const srcPath = destinationPath + '/src';
+const symbolDestination = srcPath + '/symbol';
+const nemDestination = srcPath + '/nem';
+
+fs.ensureDirSync(destinationPath);
+fs.ensureDirSync(symbolDestination);
+fs.ensureDirSync(nemDestination);
 
 const symbolPath = path.join(__dirname, '/src/schema/symbol.yaml');
 const symbolSchema = YAML.load(fs.readFileSync(symbolPath, 'utf8')) as Schema[];

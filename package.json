@@ -1,7 +1,7 @@
 {
-    "name": "symbol-ts-generator",
+    "name": "symbol-typescript-generator",
     "version": "0.0.1",
-    "description": "symbol typescript generator",
+    "description": "symbol typescript buffer generator",
     "main": "dist/index.js",
     "typings": "dist/index.d.ts",
     "scripts": {
