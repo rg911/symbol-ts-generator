@@ -28,14 +28,10 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "build",
+    "src/static"
   ],
   "include": [
-    "test/**/*.spec.ts",
     "src/**/*.ts",
-    "src/core/nem/external/*.js",
-    "test/vector-tests/*.ts",
-    "test/test-vector/*",
-    "examples/**/*.ts",
   ]
 }

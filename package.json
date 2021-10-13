@@ -5,12 +5,13 @@
     "main": "dist/index.js",
     "typings": "dist/index.d.ts",
     "scripts": {
-        "build": "npx shx rm -rf dist/ && tsc"
+        "build": "npx shx rm -rf build/ && tsc && ts-node index.ts"
     },
     "author": "stevenLiu",
     "license": "Apache-2.0",
     "devDependencies": {
         "@types/chai": "^4.2.21",
+        "@types/fs-extra": "^9.0.13",
         "@types/mocha": "^9.0.0",
         "@types/n-readlines": "^1.0.2",
         "@types/node": "^16.4.6",
@@ -35,6 +36,7 @@
     },
     "dependencies": {
         "bigint-buffer": "^1.1.5",
+        "fs-extra": "^10.0.0",
         "n-readlines": "^1.0.1"
     }
 }

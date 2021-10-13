@@ -1,6 +1,8 @@
+import * as fs from 'fs-extra';
 import { BuildInType, DispositionType } from './Enums';
 import { Layout } from './interface/layout';
-
+import LineByLine = require('n-readlines');
+import path = require('path');
 export class Helper {
     /**
      * Convert string name from snake_case, kebab-case, PascalCase to camel case.
@@ -300,5 +302,37 @@ export class Helper {
             return false;
         }
         return !(name === 'size' || name.indexOf('_reserved') > -1 || name.endsWith('_count') || name.endsWith('_size'));
+    }
+
+    /**
+     * Write content into file
+     * @param fileName - filename
+     * @param fileContent - file content
+     */
+    public static writeToFile(fileName: string, destination: string, fileContent: string[], fileHeader: string[]): void {
+        const writeStream = fs.createWriteStream(`${destination}/${fileName}`);
+        fileHeader.forEach((line) => writeStream.write(`${line}\n`));
+        fileContent.forEach((line) => writeStream.write(`${line}\n`));
+        writeStream.on('finish', () => {
+            console.log(`${fileName} has been generated.`);
+        });
+        writeStream.on('error', (err) => {
+            throw err;
+        });
+        writeStream.end();
+    }
+
+    /**
+     * Inject license boilerplate to an existing file content
+     * @param fileContent - existing generated file content
+     */
+    public static getLicense(): string[] {
+        const lines = new LineByLine(path.join(__dirname, './HEADER.inc'));
+        let line: false | Buffer;
+        const licenseLines: string[] = [];
+        while ((line = lines.next())) {
+            licenseLines.push(line.toString());
+        }
+        return licenseLines;
     }
 }
