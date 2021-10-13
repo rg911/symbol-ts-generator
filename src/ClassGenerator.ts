@@ -119,12 +119,13 @@ export class ClassGenerator extends GeneratorBase {
                 const param = {
                     paramName,
                     paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-                    declarable: Helper.shouldDeclareVariable(layout.name ?? '', Helper.isConst(layout)),
+                    declarable: Helper.shouldDeclareVariable(ignoredParam.name ?? '', Helper.isConst(ignoredParam)),
                     ...ignoredParam,
                 };
                 param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
                 param.comments = ignoredParam.comments;
                 params.push(param);
+                Helper.addRequiredImport(this.importList, param.type, paramName);
             });
         } else {
             layout.name = layout.name ? layout.name : layout.type;
