@@ -94,7 +94,7 @@ export class ClassGenerator extends GeneratorBase {
                 params.push({
                     paramName,
                     paramSize,
-                    declarable: Helper.shouldDeclareVariable(layout.name, Helper.isConst(layout)),
+                    declarable: Helper.shouldDeclareVariable(layout.name, Helper.isConst(layout), this.classSchema.layout),
                     ...layout,
                 });
                 Helper.addRequiredImport(this.importList, layout.type, paramName);
@@ -119,7 +119,11 @@ export class ClassGenerator extends GeneratorBase {
                 const param = {
                     paramName,
                     paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-                    declarable: Helper.shouldDeclareVariable(ignoredParam.name ?? '', Helper.isConst(ignoredParam)),
+                    declarable: Helper.shouldDeclareVariable(
+                        ignoredParam.name ?? '',
+                        Helper.isConst(ignoredParam),
+                        this.classSchema.layout,
+                    ),
                     ...ignoredParam,
                 };
                 param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
@@ -136,7 +140,7 @@ export class ClassGenerator extends GeneratorBase {
             const param = {
                 paramName: paramName,
                 paramSize,
-                declarable: Helper.shouldDeclareVariable(layout.name, isConst),
+                declarable: Helper.shouldDeclareVariable(layout.name, isConst, this.classSchema.layout),
                 ...layout,
             };
             param.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);

@@ -297,11 +297,17 @@ export class Helper {
      * @param isConstant - variable is constant
      * @returns should declare variable or not
      */
-    public static shouldDeclareVariable(name: string, isConstant: boolean): boolean {
+    public static shouldDeclareVariable(name: string, isConstant: boolean, layouts: Layout[]): boolean {
         if (isConstant) {
             return false;
         }
-        return !(name === 'size' || name.indexOf('_reserved') > -1 || name.endsWith('_count') || name.endsWith('_size'));
+        if (name.endsWith('_count')) {
+            if (layouts.find((layout) => layout.size && layout.size === name)) {
+                return false;
+            }
+            return true;
+        }
+        return !(name === 'size' || name.indexOf('_reserved') > -1 || name.endsWith('_size'));
     }
 
     /**
