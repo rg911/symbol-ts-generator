@@ -301,13 +301,13 @@ export class Helper {
         if (isConstant) {
             return false;
         }
-        if (name.endsWith('_count')) {
+        if (name.endsWith('_count') || name.endsWith('_size')) {
             if (layouts.find((layout) => layout.size && layout.size === name)) {
                 return false;
             }
             return true;
         }
-        return !(name === 'size' || name.indexOf('_reserved') > -1 || name.endsWith('_size'));
+        return !(name === 'size' || name.indexOf('_reserved') > -1);
     }
 
     /**
