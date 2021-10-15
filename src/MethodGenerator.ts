@@ -46,9 +46,12 @@ export class MethodGenerator extends GeneratorBase {
                 if (param.disposition === 'inline') {
                     const inlineParams = this.parsedParameters
                         .filter((inlineParam) => inlineParam.declarable && inlineParam.inlineClass === param.type)
-                        .map((p) => p.paramName)
-                        .join(', ');
-                    Helper.writeLines(Helper.indent(`this.${param.paramName} = new ${param.type}({${inlineParams}});`, 2), generatedLines);
+                        .map((p) => p.paramName);
+                    let paramText = inlineParams.join(', ');
+                    if (inlineParams.length > 1) {
+                        paramText = `{ ${paramText} }`;
+                    }
+                    Helper.writeLines(Helper.indent(`this.${param.paramName} = new ${param.type}(${paramText});`, 2), generatedLines);
                 } else {
                     Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
                 }
@@ -222,10 +225,14 @@ export class MethodGenerator extends GeneratorBase {
                 .filter((param) => param.disposition !== 'const')
                 .forEach((param) => {
                     const bodyLines: string[] = [];
-                    let spliceLines = [
-                        `byteArray.splice(0, ${param.paramSize === undefined ? `${param.paramName}.size` : param.paramSize});`,
-                    ];
                     const parentSchema = this.schema.find((schema) => schema.name === param.type);
+                    let spliceLines = [
+                        `byteArray.splice(0, ${
+                            param.paramSize !== undefined || (parentSchema && Helper.isEnum(parentSchema.type))
+                                ? param.paramSize
+                                : `${param.paramName}.size`
+                        });`,
+                    ];
                     argument = 'Uint8Array.from(byteArray)';
                     // Handle enum
                     const type = parentSchema && Helper.isEnum(parentSchema.type) ? 'enum' : param.type;
@@ -313,7 +320,7 @@ export class MethodGenerator extends GeneratorBase {
         } else {
             Helper.writeLines(Helper.indent(`let newArray = new Uint8Array();`, 2), generatedLines);
             params
-                .filter((param) => param.declarable)
+                .filter((param) => param.disposition !== 'const')
                 .forEach((param) => {
                     const bodyLines: string[] = [];
                     let name = `this.${param.paramName}${param.condition ? '!' : ''}`;

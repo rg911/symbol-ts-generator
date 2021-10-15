@@ -120,22 +120,23 @@ export class ClassGenerator extends GeneratorBase {
      */
     private parseDispositionParam(schema: Schema, layout: Layout, params: Parameter[]) {
         if (Helper.isInline(layout) && !Helper.shouldGenerateClass(layout.type)) {
-            const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
-            layouts?.forEach((ignoredParam) => {
-                const paramSize = typeof ignoredParam.size === 'string' ? undefined : this.getRealLayoutSize(ignoredParam);
-                const paramName = Helper.toCamel(ignoredParam.name ? ignoredParam.name : '');
-                const param = {
-                    paramName,
-                    paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-                    declarable: Helper.shouldDeclareVariable(ignoredParam.name ?? '', Helper.isConst(ignoredParam), schema.layout),
-                    inlineClass: layout.type,
-                    ...ignoredParam,
-                };
-                param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
-                param.comments = ignoredParam.comments;
-                params.push(param);
-                Helper.addRequiredImport(this.importList, param.type, paramName);
-            });
+            // const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
+            // layouts?.forEach((ignoredParam) => {
+            //     const paramSize = typeof ignoredParam.size === 'string' ? undefined : this.getRealLayoutSize(ignoredParam);
+            //     const paramName = Helper.toCamel(ignoredParam.name ? ignoredParam.name : '');
+            //     const param = {
+            //         paramName,
+            //         paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
+            //         declarable: Helper.shouldDeclareVariable(ignoredParam.name ?? '', Helper.isConst(ignoredParam), schema.layout),
+            //         inlineClass: '',
+            //         ...ignoredParam,
+            //     };
+            //     param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
+            //     param.comments = ignoredParam.comments;
+            //     params.push(param);
+            //     Helper.addRequiredImport(this.importList, param.type, paramName);
+            // });
+            this.parseInlineLayout(layout, params);
         } else {
             layout.name = layout.name ? layout.name : layout.type;
             const isConst = Helper.isConst(layout);
@@ -155,6 +156,31 @@ export class ClassGenerator extends GeneratorBase {
             if (!isConst) {
                 Helper.addRequiredImport(this.importList, layout.type, paramName);
             }
+        }
+    }
+
+    private parseInlineLayout(layout: Layout, params: Parameter[]) {
+        const schema = this.schema.find((schema) => schema.name === layout.type);
+        if (schema && schema.layout.length > 0) {
+            schema.layout.forEach((param) => {
+                if (Helper.isInline(param)) {
+                    this.parseInlineLayout(param, params);
+                } else {
+                    const paramSize = typeof param.size === 'string' ? undefined : this.getRealLayoutSize(param);
+                    const paramName = Helper.toCamel(param.name ? param.name : '');
+                    const parsedParam = {
+                        paramName,
+                        paramSize: typeof param.size === 'string' ? undefined : param.size,
+                        declarable: Helper.shouldDeclareVariable(param.name ?? '', Helper.isConst(param), schema.layout),
+                        inlineClass: '',
+                        ...param,
+                    };
+                    parsedParam.type = Helper.getGeneratedType(param.type, paramSize, param.disposition);
+                    parsedParam.comments = param.comments;
+                    params.push(parsedParam);
+                    Helper.addRequiredImport(this.importList, parsedParam.type, paramName);
+                }
+            });
         }
     }
 
@@ -193,26 +219,44 @@ export class ClassGenerator extends GeneratorBase {
      */
     private flattenedParameters(): Parameter[] {
         const parameters: Parameter[] = [];
-        this.classParameters
-            .filter((param) => param.declarable)
-            .forEach((param) => {
-                if (param.disposition && param.disposition === 'inline') {
-                    const inlineSchema = this.schema.find((schema) => schema.name === param.type);
-                    if (inlineSchema) {
-                        this.parseClassParameters(inlineSchema)
-                            .filter((inlineParam) => inlineParam.declarable)
-                            .forEach((inlineParam) => {
-                                inlineParam.inlineClass = param.type;
-                                parameters.push(inlineParam);
-                                Helper.addRequiredImport(this.importList, inlineParam.type, inlineParam.paramName);
-                            });
-                    }
-                } else {
+        this.classParameters.forEach((param) => {
+            if (param.disposition && param.disposition === 'inline') {
+                const inlineSchema = this.schema.find((schema) => schema.name === param.type);
+                if (inlineSchema) {
+                    // this.parseClassParameters(inlineSchema)
+                    //     .filter((inlineParam) => inlineParam.declarable)
+                    //     .forEach((inlineParam) => {
+                    //         inlineParam.inlineClass = param.type;
+                    //         parameters.push(inlineParam);
+                    //         Helper.addRequiredImport(this.importList, inlineParam.type, inlineParam.paramName);
+                    //     });
+                    this.recursivelyParseInlineParameters(inlineSchema, param.type, parameters);
+                }
+            } else {
+                if (param.declarable) {
                     parameters.push(param);
                     Helper.addRequiredImport(this.importList, param.type, param.paramName);
                 }
-            });
+            }
+        });
         return parameters;
+    }
+
+    private recursivelyParseInlineParameters(classSchema: Schema, inlineClassName = '', params: Parameter[] = []): void {
+        this.parseClassParameters(classSchema).forEach((param) => {
+            if (param.disposition && param.disposition === 'inline') {
+                const inlineSchema = this.schema.find((schema) => schema.name === param.type);
+                if (inlineSchema) {
+                    this.recursivelyParseInlineParameters(inlineSchema, param.type, params);
+                }
+            } else {
+                param.inlineClass = inlineClassName;
+                if (param.declarable) {
+                    params.push(param);
+                    Helper.addRequiredImport(this.importList, param.type, param.paramName);
+                }
+            }
+        });
     }
 
     /**

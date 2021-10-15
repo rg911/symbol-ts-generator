@@ -276,7 +276,7 @@ export class Helper {
      */
     public static addRequiredImport(importList: string[], type: string, name: string): void {
         if (type !== name && !Helper.isByte(type) && !['Uint8Array', 'number', 'bigint'].includes(type)) {
-            if (!importList.includes(type)) {
+            if (!importList.includes(Helper.getArrayKind(type))) {
                 importList.push(Helper.getArrayKind(type));
             }
         }
@@ -288,7 +288,7 @@ export class Helper {
      * @returns should generate class or not
      */
     public static shouldGenerateClass(name: string): boolean {
-        return !['SizePrefixedEntity', 'VerifiableEntity', 'EntityBody'].includes(name);
+        return !['SizePrefixedEntity', 'VerifiableEntity', 'EntityBody', 'EmbeddedTransactionHeader'].includes(name);
     }
 
     /**
