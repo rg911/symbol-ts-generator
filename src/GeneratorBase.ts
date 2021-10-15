@@ -28,14 +28,17 @@ export class GeneratorBase {
     /**
      * Generate class header
      * @param schema - schema definition
+     * @param superClass - super class name
      * @returns generated class header definition
      */
-    protected getClassHeader(schema: Schema): string[] {
+    protected getClassHeader(schema: Schema, superClass?: string): string[] {
         const generatedLines: string[] = [];
         const classType = Helper.isEnum(schema.type) ? 'enum' : 'class';
         Helper.writeLines(this.generateComment(schema.comments ? schema.comments : schema.name), generatedLines);
         Helper.writeLines(
-            `export ${classType} ${schema.name}${Helper.isEnum(classType) ? '' : ' implements Serializer'} {`,
+            `export ${classType} ${schema.name}${
+                Helper.isEnum(classType) ? '' : ` ${superClass ? `extends ${superClass} ` : ''}implements Serializer`
+            } {`,
             generatedLines,
         );
         return generatedLines;
@@ -70,9 +73,9 @@ export class GeneratorBase {
         if (layout.size && typeof layout.size === 'number') {
             return layout.size;
         } else {
-            const schema = this.schema.find((schema) => schema.name === layout.type);
-            if (schema) {
-                return schema && Helper.isEnum(schema.type) ? schema.size : undefined;
+            const parentSchema = this.schema.find((schema) => schema.name === layout.type);
+            if (parentSchema) {
+                return Helper.isEnum(parentSchema.type) ? parentSchema.size : undefined;
             }
             return undefined;
         }

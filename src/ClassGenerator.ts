@@ -11,6 +11,7 @@ export class ClassGenerator extends GeneratorBase {
     private classParameters: Parameter[];
     private importList: string[];
     private flatInlineParameters: Parameter[];
+    private superClassLayout: Layout | undefined;
 
     /**
      * Constructor
@@ -23,6 +24,7 @@ export class ClassGenerator extends GeneratorBase {
         this.generatedLines = [];
         this.classParameters = this.parseClassParameters(classSchema);
         this.flatInlineParameters = this.flattenedParameters();
+        this.superClassLayout = this.getSuperClass();
         this.methodGenerator = new MethodGenerator(classSchema, schema, this.flatInlineParameters);
     }
 
@@ -33,12 +35,15 @@ export class ClassGenerator extends GeneratorBase {
     public generate(): string[] {
         Helper.writeLines(this.generateImports(), this.generatedLines, true);
         this.generateParameterInterface();
-        Helper.writeLines(this.getClassHeader(this.classSchema), this.generatedLines);
+        Helper.writeLines(this.getClassHeader(this.classSchema, this.superClassLayout?.type), this.generatedLines);
         this.generatePublicVariables();
-        Helper.writeLines(this.methodGenerator.generateConstructor(this.classParameters), this.generatedLines);
-        Helper.writeLines(this.methodGenerator.generateDeserializer(this.classParameters), this.generatedLines);
-        Helper.writeLines(this.methodGenerator.generateSizeGetter(this.classParameters), this.generatedLines);
-        Helper.writeLines(this.methodGenerator.generateSerializer(this.classParameters), this.generatedLines);
+        Helper.writeLines(this.methodGenerator.generateConstructor(this.classParameters, this.superClassLayout?.type), this.generatedLines);
+        Helper.writeLines(
+            this.methodGenerator.generateDeserializer(this.classParameters, this.superClassLayout?.type),
+            this.generatedLines,
+        );
+        Helper.writeLines(this.methodGenerator.generateSizeGetter(this.classParameters, this.superClassLayout?.type), this.generatedLines);
+        Helper.writeLines(this.methodGenerator.generateSerializer(this.classParameters, this.superClassLayout?.type), this.generatedLines);
         Helper.writeLines('}', this.generatedLines);
         return this.generatedLines;
     }
@@ -120,22 +125,6 @@ export class ClassGenerator extends GeneratorBase {
      */
     private parseDispositionParam(schema: Schema, layout: Layout, params: Parameter[]) {
         if (Helper.isInline(layout) && !Helper.shouldGenerateClass(layout.type)) {
-            // const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
-            // layouts?.forEach((ignoredParam) => {
-            //     const paramSize = typeof ignoredParam.size === 'string' ? undefined : this.getRealLayoutSize(ignoredParam);
-            //     const paramName = Helper.toCamel(ignoredParam.name ? ignoredParam.name : '');
-            //     const param = {
-            //         paramName,
-            //         paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-            //         declarable: Helper.shouldDeclareVariable(ignoredParam.name ?? '', Helper.isConst(ignoredParam), schema.layout),
-            //         inlineClass: '',
-            //         ...ignoredParam,
-            //     };
-            //     param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
-            //     param.comments = ignoredParam.comments;
-            //     params.push(param);
-            //     Helper.addRequiredImport(this.importList, param.type, paramName);
-            // });
             this.parseInlineLayout(layout, params);
         } else {
             layout.name = layout.name ? layout.name : layout.type;
@@ -152,6 +141,9 @@ export class ClassGenerator extends GeneratorBase {
             };
             param.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);
             param.comments = layout.comments ? layout.comments : paramName;
+            if (layout.name === 'network') {
+                console.log(param);
+            }
             params.push(param);
             if (!isConst) {
                 Helper.addRequiredImport(this.importList, layout.type, paramName);
@@ -170,7 +162,7 @@ export class ClassGenerator extends GeneratorBase {
                     const paramName = Helper.toCamel(param.name ? param.name : '');
                     const parsedParam = {
                         paramName,
-                        paramSize: typeof param.size === 'string' ? undefined : param.size,
+                        paramSize,
                         declarable: Helper.shouldDeclareVariable(param.name ?? '', Helper.isConst(param), schema.layout),
                         inlineClass: '',
                         ...param,
@@ -223,13 +215,6 @@ export class ClassGenerator extends GeneratorBase {
             if (param.disposition && param.disposition === 'inline') {
                 const inlineSchema = this.schema.find((schema) => schema.name === param.type);
                 if (inlineSchema) {
-                    // this.parseClassParameters(inlineSchema)
-                    //     .filter((inlineParam) => inlineParam.declarable)
-                    //     .forEach((inlineParam) => {
-                    //         inlineParam.inlineClass = param.type;
-                    //         parameters.push(inlineParam);
-                    //         Helper.addRequiredImport(this.importList, inlineParam.type, inlineParam.paramName);
-                    //     });
                     this.recursivelyParseInlineParameters(inlineSchema, param.type, parameters);
                 }
             } else {
@@ -267,7 +252,7 @@ export class ClassGenerator extends GeneratorBase {
     private generateParamTypePairLine(prefix: string): string[] {
         const generatedLines: string[] = [];
         this.classParameters
-            .filter((param) => param.declarable)
+            .filter((param) => param.declarable && param.type !== this.superClassLayout?.type)
             .forEach((param) => {
                 Helper.writeLines(this.generateComment(param.comments, 1), generatedLines);
                 Helper.writeLines(
@@ -292,5 +277,12 @@ export class ClassGenerator extends GeneratorBase {
                 Helper.writeLines(this.generateComment(param.comments, 1), this.generatedLines);
                 Helper.writeLines(Helper.indent(`public readonly ${param.paramName} = ${param.value};`, 1), this.generatedLines);
             });
+    }
+
+    private getSuperClass(): Layout | undefined {
+        if (this.classSchema.layout) {
+            return this.classSchema.layout.find((l) => Helper.isInline(l) && Helper.shouldGenerateClass(l.type));
+        }
+        return undefined;
     }
 }
