@@ -10,6 +10,7 @@ export class ClassGenerator extends GeneratorBase {
     private methodGenerator: MethodGenerator;
     private classParameters: Parameter[];
     private importList: string[];
+    private flatInlineParameters: Parameter[];
 
     /**
      * Constructor
@@ -20,8 +21,9 @@ export class ClassGenerator extends GeneratorBase {
         super(schema);
         this.importList = ['Utils', 'Serializer'];
         this.generatedLines = [];
-        this.methodGenerator = new MethodGenerator(classSchema, schema);
-        this.classParameters = this.parseClassParameters();
+        this.classParameters = this.parseClassParameters(classSchema);
+        this.flatInlineParameters = this.flattenedParameters();
+        this.methodGenerator = new MethodGenerator(classSchema, schema, this.flatInlineParameters);
     }
 
     /**
@@ -52,39 +54,43 @@ export class ClassGenerator extends GeneratorBase {
 
     /**
      * Parse class parameter from class schema
+     * @param schema - class schema
      * @returns parsed parameters
      */
-    private parseClassParameters(): Parameter[] {
-        if (this.classSchema.layout) {
-            return this.generateLayoutClassParams();
+    private parseClassParameters(schema: Schema): Parameter[] {
+        if (schema.layout) {
+            return this.generateLayoutClassParams(schema);
         } else {
-            return [this.generateSimpleClassParams()];
+            return [this.generateSimpleClassParams(schema)];
         }
     }
 
     /**
      * Generate simple parameter which does not have layout
+     * @param schema - class schema
      * @returns prepared parameter
      */
-    private generateSimpleClassParams(): Parameter {
-        const schemaType = this.classSchema.type;
-        Helper.addRequiredImport(this.importList, this.classSchema.type, this.classSchema.name);
+    private generateSimpleClassParams(schema: Schema): Parameter {
+        const schemaType = schema.type;
+        Helper.addRequiredImport(this.importList, schema.type, schema.name);
         return {
-            paramName: Helper.toCamel(this.classSchema.name),
-            type: Helper.getGeneratedType(schemaType, this.classSchema.size),
-            comments: this.classSchema.comments ? this.classSchema.comments : this.classSchema.name,
-            paramSize: this.classSchema.size,
+            paramName: Helper.toCamel(schema.name),
+            type: Helper.getGeneratedType(schemaType, schema.size),
+            comments: schema.comments ? schema.comments : schema.name,
+            paramSize: schema.size,
             declarable: true,
+            inlineClass: '',
         };
     }
 
     /**
      * Generate list of layout parameters
+     * @param schema - class schema
      * @returns prepared parameters
      */
-    private generateLayoutClassParams(): Parameter[] {
+    private generateLayoutClassParams(schema: Schema): Parameter[] {
         const params: Parameter[] = [];
-        this.classSchema.layout.forEach((layout) => {
+        schema.layout.forEach((layout) => {
             layout.name = layout.name ? layout.name : '';
             const paramName = Helper.isConst(layout) ? layout.name : Helper.toCamel(layout.name); // Keep const name as it is
             const paramSize = typeof layout.size === 'string' ? undefined : this.getRealLayoutSize(layout);
@@ -94,12 +100,13 @@ export class ClassGenerator extends GeneratorBase {
                 params.push({
                     paramName,
                     paramSize,
-                    declarable: Helper.shouldDeclareVariable(layout.name, Helper.isConst(layout), this.classSchema.layout),
+                    declarable: Helper.shouldDeclareVariable(layout.name, Helper.isConst(layout), schema.layout),
+                    inlineClass: '',
                     ...layout,
                 });
                 Helper.addRequiredImport(this.importList, layout.type, paramName);
             } else {
-                this.parseDispositionParam(layout, params);
+                this.parseDispositionParam(schema, layout, params);
             }
         });
         return params;
@@ -107,10 +114,11 @@ export class ClassGenerator extends GeneratorBase {
 
     /**
      * parse disposition type parameter
+     * @param schema - class schema
      * @param layout - schema layout
      * @param params - parameter list
      */
-    private parseDispositionParam(layout: Layout, params: Parameter[]) {
+    private parseDispositionParam(schema: Schema, layout: Layout, params: Parameter[]) {
         if (Helper.isInline(layout) && !Helper.shouldGenerateClass(layout.type)) {
             const layouts = this.schema.find((schema) => schema.name === layout.type)?.layout;
             layouts?.forEach((ignoredParam) => {
@@ -119,11 +127,8 @@ export class ClassGenerator extends GeneratorBase {
                 const param = {
                     paramName,
                     paramSize: typeof ignoredParam.size === 'string' ? undefined : ignoredParam.size,
-                    declarable: Helper.shouldDeclareVariable(
-                        ignoredParam.name ?? '',
-                        Helper.isConst(ignoredParam),
-                        this.classSchema.layout,
-                    ),
+                    declarable: Helper.shouldDeclareVariable(ignoredParam.name ?? '', Helper.isConst(ignoredParam), schema.layout),
+                    inlineClass: layout.type,
                     ...ignoredParam,
                 };
                 param.type = Helper.getGeneratedType(ignoredParam.type, paramSize, ignoredParam.disposition);
@@ -140,7 +145,8 @@ export class ClassGenerator extends GeneratorBase {
             const param = {
                 paramName: paramName,
                 paramSize,
-                declarable: Helper.shouldDeclareVariable(layout.name, isConst, this.classSchema.layout),
+                declarable: Helper.shouldDeclareVariable(layout.name, isConst, schema.layout),
+                inlineClass: '',
                 ...layout,
             };
             param.type = Helper.getGeneratedType(layout.type, paramSize, layout.disposition);
@@ -173,9 +179,40 @@ export class ClassGenerator extends GeneratorBase {
         if (this.classParameters.length > 1) {
             Helper.writeLines(this.generateComment(`Interface to create instances of ${this.classSchema.name}`, 0), this.generatedLines);
             Helper.writeLines(`export interface ${this.classSchema.name}Params {`, this.generatedLines);
-            Helper.writeLines(this.generateParamTypePairLine(''), this.generatedLines);
+            this.flatInlineParameters.forEach((param) => {
+                Helper.writeLines(this.generateComment(param.comments, 1), this.generatedLines);
+                Helper.writeLines(Helper.indent(`${param.paramName}${param.condition ? '?' : ''}: ${param.type};`, 1), this.generatedLines);
+            });
             Helper.writeLines('}', this.generatedLines, true);
         }
+    }
+
+    /**
+     * Get flattened parameter list
+     * @returns flattened parameter list if inline disposition exists
+     */
+    private flattenedParameters(): Parameter[] {
+        const parameters: Parameter[] = [];
+        this.classParameters
+            .filter((param) => param.declarable)
+            .forEach((param) => {
+                if (param.disposition && param.disposition === 'inline') {
+                    const inlineSchema = this.schema.find((schema) => schema.name === param.type);
+                    if (inlineSchema) {
+                        this.parseClassParameters(inlineSchema)
+                            .filter((inlineParam) => inlineParam.declarable)
+                            .forEach((inlineParam) => {
+                                inlineParam.inlineClass = param.type;
+                                parameters.push(inlineParam);
+                                Helper.addRequiredImport(this.importList, inlineParam.type, inlineParam.paramName);
+                            });
+                    }
+                } else {
+                    parameters.push(param);
+                    Helper.addRequiredImport(this.importList, param.type, param.paramName);
+                }
+            });
+        return parameters;
     }
 
     /**
@@ -188,13 +225,11 @@ export class ClassGenerator extends GeneratorBase {
         this.classParameters
             .filter((param) => param.declarable)
             .forEach((param) => {
-                if (param.declarable) {
-                    Helper.writeLines(this.generateComment(param.comments, 1), generatedLines);
-                    Helper.writeLines(
-                        Helper.indent(`${prefix}${param.paramName}${param.condition ? '?' : ''}: ${param.type};`, 1),
-                        generatedLines,
-                    );
-                }
+                Helper.writeLines(this.generateComment(param.comments, 1), generatedLines);
+                Helper.writeLines(
+                    Helper.indent(`${prefix}${param.paramName}${param.condition ? '?' : ''}: ${param.type};`, 1),
+                    generatedLines,
+                );
             });
         return generatedLines;
     }

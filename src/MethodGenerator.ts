@@ -8,8 +8,9 @@ export class MethodGenerator extends GeneratorBase {
      * Constructor
      * @param classSchema - schema of the method to be generated
      * @param schema - schema list
+     * @param parsedParameters - parsed parameters
      */
-    constructor(public readonly classSchema: Schema, schema: Schema[]) {
+    constructor(public readonly classSchema: Schema, schema: Schema[], public readonly parsedParameters: Parameter[]) {
         super(schema);
     }
 
@@ -28,7 +29,7 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(
                 this.wrapMethodDeclarationLines(
                     Helper.indent('constructor({ ', 1),
-                    params
+                    this.parsedParameters
                         .filter((param) => param.declarable)
                         .map((param) => param.paramName)
                         .join(', '),
@@ -42,8 +43,18 @@ export class MethodGenerator extends GeneratorBase {
         params
             .filter((param) => param.declarable)
             .forEach((param) => {
-                Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
+                if (param.disposition === 'inline') {
+                    const inlineParams = this.parsedParameters
+                        .filter((inlineParam) => inlineParam.declarable && inlineParam.inlineClass === param.type)
+                        .map((p) => p.paramName)
+                        .join(', ');
+                    Helper.writeLines(Helper.indent(`this.${param.paramName} = new ${param.type}({${inlineParams}});`, 2), generatedLines);
+                } else {
+                    Helper.writeLines(Helper.indent(`this.${param.paramName} = ${param.paramName};`, 2), generatedLines);
+                }
             });
+
+        // Handle inline
 
         Helper.writeLines(Helper.indent(`}`, 1), generatedLines, true);
         return generatedLines;
@@ -93,9 +104,14 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(
                 this.wrapMethodDeclarationLines(
                     Helper.indent(`return new ${this.classSchema.name}({ `, 2),
-                    params
+                    this.parsedParameters
                         .filter((param) => param.declarable)
-                        .map((param) => `${param.paramName}: ${param.paramName}`)
+                        .map(
+                            (param) =>
+                                `${param.paramName}: ${
+                                    param.inlineClass ? `${Helper.toCamel(param.inlineClass)}.${param.paramName}` : param.paramName
+                                }`,
+                        )
                         .join(', '),
                     ' });',
                     2,
@@ -150,11 +166,16 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`let size = 0;`, 2), generatedLines);
             let sizeLine = '';
             params
-                .filter((param) => param.declarable)
+                .filter((param) => param.disposition !== 'const')
                 .forEach((param) => {
+                    const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
                     if (!param.paramSize) {
                         if (Helper.shouldGenerateClass(param.type)) {
-                            sizeLine = `this.${param.paramName}${param.condition ? '!' : ''}.size`;
+                            if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                                sizeLine = parentSchema.size?.toString() ?? '';
+                            } else {
+                                sizeLine = `this.${param.paramName}${param.condition ? '!' : ''}.size`;
+                            }
                         }
                     } else {
                         sizeLine = param.paramSize.toString();
@@ -165,7 +186,7 @@ export class MethodGenerator extends GeneratorBase {
                             ? '.length'
                             : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0)';
                         // Check enum array
-                        const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
+
                         if (parentSchema && Helper.isEnum(parentSchema.type)) {
                             sizeMethod = `.reduce((sum) => sum + ${parentSchema.size}, 0)`;
                         }
@@ -197,79 +218,83 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`const byteArray = Array.from(payload);`, 2), generatedLines);
             const appliedPlaceholder: string[] = [];
             const bottomConditionLines: string[] = [];
-            params.forEach((param) => {
-                const bodyLines: string[] = [];
-                let spliceLines = [`byteArray.splice(0, ${param.paramSize === undefined ? `${param.paramName}.size` : param.paramSize});`];
-                const parentSchema = this.schema.find((schema) => schema.name === param.type);
-                argument = 'Uint8Array.from(byteArray)';
-                // Handle enum
-                const type = parentSchema && Helper.isEnum(parentSchema.type) ? 'enum' : param.type;
-                const method = Helper.getDeserializeUtilMethodByType(type, argument, param.paramSize);
+            params
+                .filter((param) => param.disposition !== 'const')
+                .forEach((param) => {
+                    const bodyLines: string[] = [];
+                    let spliceLines = [
+                        `byteArray.splice(0, ${param.paramSize === undefined ? `${param.paramName}.size` : param.paramSize});`,
+                    ];
+                    const parentSchema = this.schema.find((schema) => schema.name === param.type);
+                    argument = 'Uint8Array.from(byteArray)';
+                    // Handle enum
+                    const type = parentSchema && Helper.isEnum(parentSchema.type) ? 'enum' : param.type;
+                    const method = Helper.getDeserializeUtilMethodByType(type, argument, param.paramSize);
 
-                //Handle array
-                let bodyLine = [`${param.condition ? '' : 'const '}${param.paramName} = ${method}`];
-                if ((param.disposition && param.disposition === 'reserved') || Helper.isConst(param)) {
-                    bodyLine = [method];
-                }
-                if (Helper.isArrayDisposition(param.disposition)) {
-                    let reduceLine = `${param.paramName}.reduce((sum, c) => sum + c.size, 0),`;
-                    if (Helper.isFillArray(param)) {
-                        bodyLine = [`const ${param.paramName} = Utils.deserializeRemaining(`];
-                        bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
-                        bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                        bodyLine.push(Helper.indent('byteArray.length,', 1));
-                        bodyLine.push(Helper.indent('0,', 1));
-                        bodyLine.push(');');
-                        reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0),`;
-                    } else if (param.size) {
-                        if (param.type === 'Uint8Array') {
-                            bodyLine = [
-                                `const ${param.paramName} = Utils.getBytes(Uint8Array.from(byteArray), ${Helper.toCamel(
-                                    param.size?.toString(),
-                                )});`,
-                            ];
-                            reduceLine = `${Helper.toCamel(param.size?.toString())},`;
-                        } else {
-                            const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
-                            if (parentSchema && Helper.isEnum(parentSchema.type)) {
-                                bodyLine = [`const ${param.paramName} = Utils.deserializeEnums(`];
-                                bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
-                                bodyLine.push(Helper.indent(`${parentSchema.size},`, 1));
-                                bodyLine.push(');');
-                                reduceLine = `${param.paramName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
+                    //Handle array
+                    let bodyLine = [`${param.condition ? '' : 'const '}${param.paramName} = ${method}`];
+                    if ((param.disposition && param.disposition === 'reserved') || Helper.isConst(param)) {
+                        bodyLine = [method];
+                    }
+                    if (Helper.isArrayDisposition(param.disposition)) {
+                        let reduceLine = `${param.paramName}.reduce((sum, c) => sum + c.size, 0),`;
+                        if (Helper.isFillArray(param)) {
+                            bodyLine = [`const ${param.paramName} = Utils.deserializeRemaining(`];
+                            bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
+                            bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                            bodyLine.push(Helper.indent('byteArray.length,', 1));
+                            bodyLine.push(Helper.indent('0,', 1));
+                            bodyLine.push(');');
+                            reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0),`;
+                        } else if (param.size) {
+                            if (param.type === 'Uint8Array') {
+                                bodyLine = [
+                                    `const ${param.paramName} = Utils.getBytes(Uint8Array.from(byteArray), ${Helper.toCamel(
+                                        param.size?.toString(),
+                                    )});`,
+                                ];
+                                reduceLine = `${Helper.toCamel(param.size?.toString())},`;
                             } else {
-                                bodyLine = [`const ${param.paramName} = Utils.deserialize(`];
-                                bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
-                                bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
-                                bodyLine.push(');');
+                                const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
+                                if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                                    bodyLine = [`const ${param.paramName} = Utils.deserializeEnums(`];
+                                    bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                                    bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
+                                    bodyLine.push(Helper.indent(`${parentSchema.size},`, 1));
+                                    bodyLine.push(');');
+                                    reduceLine = `${param.paramName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
+                                } else {
+                                    bodyLine = [`const ${param.paramName} = Utils.deserialize(`];
+                                    bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
+                                    bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                                    bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
+                                    bodyLine.push(');');
+                                }
                             }
                         }
-                    }
-                    const arraySpliceLine: string[] = [];
-                    arraySpliceLine.push('byteArray.splice(');
-                    arraySpliceLine.push(Helper.indent('0,', 1));
-                    arraySpliceLine.push(Helper.indent(reduceLine, 1));
-                    arraySpliceLine.push(');');
-                    spliceLines = arraySpliceLine;
-                }
-
-                if (this.checkIfPlaceholderConditionLineNeeded(param, params)) {
-                    if (!appliedPlaceholder.find((placeholder) => placeholder === param.condition)) {
-                        Helper.writeLines(this.getDeserializeConditionPlaceHolder(param), generatedLines);
-                        appliedPlaceholder.push(param.condition ?? '');
+                        const arraySpliceLine: string[] = [];
+                        arraySpliceLine.push('byteArray.splice(');
+                        arraySpliceLine.push(Helper.indent('0,', 1));
+                        arraySpliceLine.push(Helper.indent(reduceLine, 1));
+                        arraySpliceLine.push(');');
+                        spliceLines = arraySpliceLine;
                     }
 
-                    bottomConditionLines.push(
-                        ...this.getBottomConditionBodyLines(param, params, Helper.toCamel(param.condition ?? '') + 'Bytes'),
-                    );
-                } else {
-                    Helper.writeLines(bodyLine, bodyLines);
-                    Helper.writeLines(spliceLines, bodyLines);
-                    Helper.writeLines(this.applyCondition(param, params, bodyLines, 2, true, true), generatedLines);
-                }
-            });
+                    if (this.checkIfPlaceholderConditionLineNeeded(param, params)) {
+                        if (!appliedPlaceholder.find((placeholder) => placeholder === param.condition)) {
+                            Helper.writeLines(this.getDeserializeConditionPlaceHolder(param), generatedLines);
+                            appliedPlaceholder.push(param.condition ?? '');
+                        }
+
+                        bottomConditionLines.push(
+                            ...this.getBottomConditionBodyLines(param, params, Helper.toCamel(param.condition ?? '') + 'Bytes'),
+                        );
+                    } else {
+                        Helper.writeLines(bodyLine, bodyLines);
+                        Helper.writeLines(spliceLines, bodyLines);
+                        Helper.writeLines(this.applyCondition(param, params, bodyLines, 2, true, true), generatedLines);
+                    }
+                });
             generatedLines.push(...bottomConditionLines);
         }
         return generatedLines;

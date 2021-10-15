@@ -288,7 +288,7 @@ export class Helper {
      * @returns should generate class or not
      */
     public static shouldGenerateClass(name: string): boolean {
-        return !['SizePrefixedEntity', 'VerifiableEntity'].includes(name);
+        return !['SizePrefixedEntity', 'VerifiableEntity', 'EntityBody'].includes(name);
     }
 
     /**

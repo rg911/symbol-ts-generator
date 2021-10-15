@@ -5,4 +5,5 @@ export interface Parameter extends Layout {
     type: string;
     paramSize?: number;
     declarable: boolean;
+    inlineClass: string;
 }
