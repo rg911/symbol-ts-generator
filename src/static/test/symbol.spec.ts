@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as YAML from 'js-yaml';
+import * as path from 'path';
 import * as builders from '../src/symbol';
 
 interface BuilderTestItem {
@@ -14,7 +15,7 @@ const fromHexString = (hexString: string) => new Uint8Array((hexString.match(/.{
 
 const toHexString = (bytes: Uint8Array) => bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '').toUpperCase();
 
-const vectorDirectory = 'vector/symbol';
+const vectorDirectory = path.join(__dirname, 'vector/symbol');
 const files = fs.readdirSync(vectorDirectory);
 
 const items: BuilderTestItem[] = files
@@ -37,7 +38,7 @@ describe('serialize', function () {
         const stringPayload = item.payload + '';
         it(item.filename + ' - ' + item.builder + ' - ' + (item.comment || stringPayload), function () {
             const builderClass = (<any>builders)[item.builder];
-            const serializer = builderClass.loadFromBinary(fromHexString(stringPayload));
+            const serializer = builderClass.deserialize(fromHexString(stringPayload));
             assert.equal(toHexString(serializer.serialize()), stringPayload.toUpperCase());
             assert.equal(serializer.getSize(), stringPayload.length / 2);
         });

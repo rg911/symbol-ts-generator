@@ -149,29 +149,34 @@ export class MethodGenerator extends GeneratorBase {
         } else {
             Helper.writeLines(Helper.indent(`let size = 0;`, 2), generatedLines);
             let sizeLine = '';
-            params.forEach((param) => {
-                if (!param.paramSize) {
-                    if (Helper.shouldGenerateClass(param.type)) {
-                        sizeLine = `this.${param.paramName}${param.condition ? '!' : ''}.size`;
+            params
+                .filter((param) => param.declarable)
+                .forEach((param) => {
+                    if (!param.paramSize) {
+                        if (Helper.shouldGenerateClass(param.type)) {
+                            sizeLine = `this.${param.paramName}${param.condition ? '!' : ''}.size`;
+                        }
+                    } else {
+                        sizeLine = param.paramSize.toString();
                     }
-                } else {
-                    sizeLine = param.paramSize.toString();
-                }
-                // Handle arrays
-                if (Helper.isArrayDisposition(param.disposition)) {
-                    let sizeMethod = param.element_disposition
-                        ? '.length'
-                        : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0)';
-                    // Check enum array
-                    const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
-                    if (parentSchema && Helper.isEnum(parentSchema.type)) {
-                        sizeMethod = `.reduce((sum) => sum + ${parentSchema.size}, 0)`;
-                    }
+                    // Handle arrays
+                    if (Helper.isArrayDisposition(param.disposition)) {
+                        let sizeMethod = param.element_disposition
+                            ? '.length'
+                            : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0)';
+                        // Check enum array
+                        const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
+                        if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                            sizeMethod = `.reduce((sum) => sum + ${parentSchema.size}, 0)`;
+                        }
 
-                    sizeLine = `this.${Helper.toCamel(param.name ?? '')}${sizeMethod}`;
-                }
-                Helper.writeLines(this.applyCondition(param, params, [`size += ${sizeLine}; // ${param.paramName};`], 2), generatedLines);
-            });
+                        sizeLine = `this.${Helper.toCamel(param.name ?? '')}${sizeMethod}`;
+                    }
+                    Helper.writeLines(
+                        this.applyCondition(param, params, [`size += ${sizeLine}; // ${param.paramName};`], 2),
+                        generatedLines,
+                    );
+                });
             Helper.writeLines(Helper.indent(`return size;`, 2), generatedLines);
         }
         return generatedLines;
@@ -282,42 +287,44 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`return ${method}`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`let newArray = new Uint8Array();`, 2), generatedLines);
-            params.forEach((param) => {
-                const bodyLines: string[] = [];
-                let name = `this.${param.paramName}${param.condition ? '!' : ''}`;
-                if (name.endsWith('Size')) {
-                    name = name.replace('Size', '.length').replace('Count', '.length');
-                }
-                // Handle reserved field
-                if (param.disposition && param.disposition === 'reserved') {
-                    name = param.value as string;
-                }
-                // Handle size / count
-                if (param.name?.endsWith('_size') || param.name?.endsWith('_count')) {
-                    const parentParam = params.find((parent) => param.name && parent.size === param.name);
-
-                    if (parentParam) {
-                        name = `this.${parentParam.paramName}${param.condition ? '!' : ''}.length`;
+            params
+                .filter((param) => param.declarable)
+                .forEach((param) => {
+                    const bodyLines: string[] = [];
+                    let name = `this.${param.paramName}${param.condition ? '!' : ''}`;
+                    if (name.endsWith('Size')) {
+                        name = name.replace('Size', '.length').replace('Count', '.length');
                     }
-                }
-
-                // Handle enum & array
-                let type = param.type;
-                const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
-                if (parentSchema && Helper.isEnum(parentSchema.type)) {
-                    if (!Helper.getArrayKind(param.type).endsWith('Flags')) {
-                        type = 'enum';
+                    // Handle reserved field
+                    if (param.disposition && param.disposition === 'reserved') {
+                        name = param.value as string;
                     }
-                    if (param.disposition && Helper.isArrayDisposition(param.disposition)) {
-                        type = 'enumArray';
-                    }
-                }
+                    // Handle size / count
+                    if (param.name?.endsWith('_size') || param.name?.endsWith('_count')) {
+                        const parentParam = params.find((parent) => param.name && parent.size === param.name);
 
-                const method = Helper.getSerializeUtilMethodByType(type, name, param.paramSize, param.disposition);
-                Helper.writeLines(`const ${param.paramName}Bytes = ${method}`, bodyLines);
-                Helper.writeLines(`newArray = Utils.concatTypedArrays(newArray, ${param.paramName}Bytes);`, bodyLines);
-                Helper.writeLines(this.applyCondition(param, params, bodyLines, 2), generatedLines);
-            });
+                        if (parentParam) {
+                            name = `this.${parentParam.paramName}${param.condition ? '!' : ''}.length`;
+                        }
+                    }
+
+                    // Handle enum & array
+                    let type = param.type;
+                    const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
+                    if (parentSchema && Helper.isEnum(parentSchema.type)) {
+                        if (!Helper.getArrayKind(param.type).endsWith('Flags')) {
+                            type = 'enum';
+                        }
+                        if (param.disposition && Helper.isArrayDisposition(param.disposition)) {
+                            type = 'enumArray';
+                        }
+                    }
+
+                    const method = Helper.getSerializeUtilMethodByType(type, name, param.paramSize, param.disposition);
+                    Helper.writeLines(`const ${param.paramName}Bytes = ${method}`, bodyLines);
+                    Helper.writeLines(`newArray = Utils.concatTypedArrays(newArray, ${param.paramName}Bytes);`, bodyLines);
+                    Helper.writeLines(this.applyCondition(param, params, bodyLines, 2), generatedLines);
+                });
             Helper.writeLines(Helper.indent(`return newArray;`, 2), generatedLines);
         }
         return generatedLines;
