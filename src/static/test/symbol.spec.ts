@@ -40,7 +40,7 @@ describe('serialize', function () {
             const builderClass = (<any>builders)[item.builder];
             const serializer = builderClass.deserialize(fromHexString(stringPayload));
             assert.equal(toHexString(serializer.serialize()), stringPayload.toUpperCase());
-            assert.equal(serializer.getSize(), stringPayload.length / 2);
+            assert.equal(serializer.size, stringPayload.length / 2);
         });
     });
 });

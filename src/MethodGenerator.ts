@@ -338,6 +338,11 @@ export class MethodGenerator extends GeneratorBase {
                         if (parentParam) {
                             name = `this.${parentParam.paramName}${param.condition ? '!' : ''}.length`;
                         }
+                    } else if (param.name === 'size') {
+                        const elementParam = params.find((parent) => parent.size && parent.size === param.name);
+                        if (elementParam?.element_disposition) {
+                            name = `this.${elementParam?.name}.length`;
+                        }
                     }
 
                     // Handle enum & array

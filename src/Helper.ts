@@ -225,6 +225,11 @@ export class Helper {
                 return `Utils.bufferToBigInt(${argName});`;
             default:
                 if (type.endsWith('Flags')) {
+                    if (size === 1) {
+                        return `Utils.toFlags(${type}, Utils.bufferToUint8(${argName}));`;
+                    } else if (size === 2) {
+                        return `Utils.toFlags(${type}, Utils.bufferToUint16(${argName}));`;
+                    }
                     return `Utils.toFlags(${type}, Utils.bufferToUint8(${argName}));`;
                 }
                 return `${type}.deserialize(${argName});`;
@@ -262,7 +267,12 @@ export class Helper {
                     return `Utils.writeList(${name}, 0);`;
                 }
                 if (type.endsWith('Flags')) {
-                    return `Utils.uint8ToBuffer(Utils.fromFlags(${type}, ${name}));`;
+                    if (size === 1) {
+                        return `Utils.uint8ToBuffer(Utils.fromFlags(${type}, ${name}));`;
+                    } else if (size === 2) {
+                        return `Utils.uint16ToBuffer(Utils.fromFlags(${type}, ${name}));`;
+                    }
+                    return `Utils.uint32ToBuffer(Utils.fromFlags(${type}, ${name}));`;
                 }
                 return `${name}.serialize();`;
         }
