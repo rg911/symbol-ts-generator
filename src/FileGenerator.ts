@@ -4,6 +4,7 @@ import { EnumGenerator } from './EnumGenerator';
 import { GeneratorBase } from './GeneratorBase';
 import { Helper } from './Helper';
 import { Schema } from './interface/schema';
+import { TransactionHelperGenerator } from './TransactionHelperGenerator';
 import path = require('path');
 
 export class FileGenerator extends GeneratorBase {
@@ -24,9 +25,19 @@ export class FileGenerator extends GeneratorBase {
      * Generate files
      */
     public generate(): void {
+        this.writeClassFiles();
+        this.writeTransactionHelper();
+        this.writeIndexFile();
+        this.copyStaticFiles();
+    }
+
+    /**
+     * Write class files from schema
+     */
+    private writeClassFiles(): void {
         this.schema.forEach((item) => {
             if (Helper.shouldGenerateClass(item.name)) {
-                const filename = this.getGeneratedFileName(item);
+                const filename = `${item.name}.ts`;
                 if (Helper.isEnum(item.type)) {
                     Helper.writeToFile(filename, this.destination, new EnumGenerator(item, this.schema).generate(), this.licenseHeader);
                 } else {
@@ -35,24 +46,25 @@ export class FileGenerator extends GeneratorBase {
                 this.indexList.push(`export * from './${item.name}';`);
             }
         });
+    }
 
+    /**
+     * Write transaction helper classes
+     */
+    private writeTransactionHelper(): void {
+        new TransactionHelperGenerator(this.schema, this.destination).generate();
+    }
+
+    /**
+     * Write index.ts file
+     */
+    private writeIndexFile(): void {
         Helper.writeToFile(
             'index.ts',
             this.destination,
             this.indexList.sort((a, b) => a.localeCompare(b)),
             this.licenseHeader,
         );
-
-        this.copyStaticFiles();
-    }
-
-    /**
-     * Get generated file name
-     * @param schema - Schema item
-     * @returns - generated file name
-     */
-    private getGeneratedFileName(schema: Schema): string {
-        return `${schema.name}.ts`;
     }
 
     /**
