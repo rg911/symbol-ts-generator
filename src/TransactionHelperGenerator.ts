@@ -1,6 +1,9 @@
 import { Helper } from './Helper';
 import { Schema } from './interface/schema';
 
+/**
+ * The helper class is used in typescript sdk to deserialize the embedded transactions
+ */
 export class TransactionHelperGenerator {
     /**
      * Constructor
