@@ -52,7 +52,10 @@ export class FileGenerator extends GeneratorBase {
      * Write transaction helper classes
      */
     private writeTransactionHelper(): void {
-        new TransactionHelperGenerator(this.schema, this.destination).generate();
+        ['Transaction', 'EmbeddedTransaction'].forEach((helperType) => {
+            new TransactionHelperGenerator(helperType, this.schema, this.destination).generate();
+            this.indexList.push(`export * from './${helperType}Helper';`);
+        });
     }
 
     /**
