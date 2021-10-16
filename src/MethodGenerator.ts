@@ -284,7 +284,12 @@ export class MethodGenerator extends GeneratorBase {
                                     ),
                                 );
                                 bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                bodyLine.push(Helper.indent('byteArray.length,', 1));
+                                bodyLine.push(
+                                    Helper.indent(
+                                        `${isEmbeddedTransaction ? Helper.toCamel(param.size as string) : 'byteArray.length'},`,
+                                        1,
+                                    ),
+                                );
                                 bodyLine.push(Helper.indent(`${isEmbeddedTransaction ? '8' : '0'},`, 1));
                                 bodyLine.push(');');
                                 reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${
