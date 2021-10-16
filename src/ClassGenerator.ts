@@ -182,6 +182,9 @@ export class ClassGenerator extends GeneratorBase {
      */
     private generateImports(): string[] {
         const lines: string[] = [];
+        if (this.classSchema.name === 'AggregateTransactionBody') {
+            this.importList.push('EmbeddedTransactionHelper');
+        }
         this.importList
             .sort((a, b) => a.localeCompare(b))
             .forEach((item) => {

@@ -97,6 +97,15 @@ export class Helper {
     }
 
     /**
+     * Check if layout attribute is sized array
+     * @param type - layout attribute
+     * @returns true if layout attribute is sized array
+     */
+    public static isSizedArray(layout: Layout): boolean {
+        return layout.disposition !== undefined && layout.disposition === DispositionType.ArraySized.valueOf();
+    }
+
+    /**
      * Check if layout attribute is element array
      * @param type - layout attribute
      * @returns true if layout attribute is element array
@@ -262,9 +271,11 @@ export class Helper {
                 return `Utils.bigIntToBuffer(${name});`;
             case 'enumArray':
                 return `Utils.writeListEnum(${name}, 0);`;
+            case 'arraySize':
+                return `${name}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${size}), 0);`;
             default:
                 if (Helper.isArrayDisposition(disposition)) {
-                    return `Utils.writeList(${name}, 0);`;
+                    return `Utils.writeList(${name}, ${type === 'EmbeddedTransaction' ? '8' : '0'});`;
                 }
                 if (type.endsWith('Flags')) {
                     if (size === 1) {

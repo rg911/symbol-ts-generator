@@ -202,7 +202,9 @@ export class MethodGenerator extends GeneratorBase {
                         if (Helper.isArrayDisposition(param.disposition)) {
                             let sizeMethod = param.element_disposition
                                 ? '.length'
-                                : '.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0)';
+                                : `.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${
+                                      param.type === 'EmbeddedTransaction[]' ? '8' : '0'
+                                  }), 0)`;
                             // Check enum array
 
                             if (parentSchema && Helper.isEnum(parentSchema.type)) {
@@ -262,21 +264,32 @@ export class MethodGenerator extends GeneratorBase {
                         const type = parentSchema && Helper.isEnum(parentSchema.type) ? 'enum' : param.type;
                         const method = Helper.getDeserializeUtilMethodByType(type, argument, param.paramSize);
 
-                        //Handle array
                         let bodyLine = [`${param.condition ? '' : 'const '}${param.paramName} = ${method}`];
+                        // Handle Reserved
                         if ((param.disposition && param.disposition === 'reserved') || Helper.isConst(param)) {
                             bodyLine = [method];
                         }
+                        //Handle array
                         if (Helper.isArrayDisposition(param.disposition)) {
                             let reduceLine = `${param.paramName}.reduce((sum, c) => sum + c.size, 0),`;
-                            if (Helper.isFillArray(param)) {
-                                bodyLine = [`const ${param.paramName} = Utils.deserializeRemaining(`];
-                                bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
+                            if (Helper.isFillArray(param) || Helper.isSizedArray(param)) {
+                                const isEmbeddedTransaction = param.type === 'EmbeddedTransaction[]';
+                                bodyLine = [`const ${param.paramName}: ${param.type} = Utils.deserializeRemaining(`];
+                                bodyLine.push(
+                                    Helper.indent(
+                                        `${
+                                            isEmbeddedTransaction ? 'EmbeddedTransactionHelper' : Helper.getArrayKind(param.type)
+                                        }.deserialize,`,
+                                        1,
+                                    ),
+                                );
                                 bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
                                 bodyLine.push(Helper.indent('byteArray.length,', 1));
-                                bodyLine.push(Helper.indent('0,', 1));
+                                bodyLine.push(Helper.indent(`${isEmbeddedTransaction ? '8' : '0'},`, 1));
                                 bodyLine.push(');');
-                                reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 0), 0),`;
+                                reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${
+                                    isEmbeddedTransaction ? '8' : '0'
+                                }), 0),`;
                             } else if (param.size) {
                                 if (param.type === 'Uint8Array') {
                                     bodyLine = [
@@ -295,11 +308,21 @@ export class MethodGenerator extends GeneratorBase {
                                         bodyLine.push(');');
                                         reduceLine = `${param.paramName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
                                     } else {
-                                        bodyLine = [`const ${param.paramName} = Utils.deserialize(`];
-                                        bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
-                                        bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                        bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
-                                        bodyLine.push(');');
+                                        if (param.type === 'EmbeddedTransaction[]') {
+                                            bodyLine = [`const ${param.paramName}: ${param.type} = Utils.deserializeRemaining(`];
+                                            bodyLine.push(Helper.indent(`EmbeddedTransactionHelper.deserialize,`, 1));
+                                            bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                                            bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
+                                            bodyLine.push(Helper.indent('8', 1));
+                                            bodyLine.push(');');
+                                            reduceLine = `${param.paramName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 8), 0),`;
+                                        } else {
+                                            bodyLine = [`const ${param.paramName} = Utils.deserialize(`];
+                                            bodyLine.push(Helper.indent(`${Helper.getArrayKind(param.type)}.deserialize,`, 1));
+                                            bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
+                                            bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
+                                            bodyLine.push(');');
+                                        }
                                     }
                                 }
                             }
@@ -353,6 +376,7 @@ export class MethodGenerator extends GeneratorBase {
                         Helper.writeLines(Helper.indent(`newArray = Utils.concatTypedArrays(newArray, superBytes);`, 2), generatedLines);
                     } else {
                         const bodyLines: string[] = [];
+                        let type = param.type;
                         let name = `this.${param.paramName}${param.condition ? '!' : ''}`;
                         if (name.endsWith('Size')) {
                             name = name.replace('Size', '.length').replace('Count', '.length');
@@ -364,9 +388,19 @@ export class MethodGenerator extends GeneratorBase {
                         // Handle size / count
                         if (param.name?.endsWith('_size') || param.name?.endsWith('_count')) {
                             const parentParam = params.find((parent) => param.name && parent.size === param.name);
-
                             if (parentParam) {
-                                name = `this.${parentParam.paramName}${param.condition ? '!' : ''}.length`;
+                                if (parentParam.disposition === 'array sized') {
+                                    const sizedArrayMethod = Helper.getSerializeUtilMethodByType(
+                                        'arraySize',
+                                        `this.${parentParam.paramName}`,
+                                        parentParam.type === 'EmbeddedTransaction[]' ? 8 : 0,
+                                        param.disposition,
+                                    );
+                                    Helper.writeLines(`const ${param.paramName} = ${sizedArrayMethod}`, bodyLines);
+                                    name = param.paramName;
+                                } else {
+                                    name = `this.${parentParam.paramName}${param.condition ? '!' : ''}.length`;
+                                }
                             }
                         } else if (param.name === 'size') {
                             const elementParam = params.find((parent) => parent.size && parent.size === param.name);
@@ -376,7 +410,6 @@ export class MethodGenerator extends GeneratorBase {
                         }
 
                         // Handle enum & array
-                        let type = param.type;
                         const parentSchema = this.schema.find((schema) => schema.name === Helper.getArrayKind(param.type));
                         if (parentSchema && Helper.isEnum(parentSchema.type)) {
                             if (!Helper.getArrayKind(param.type).endsWith('Flags')) {
@@ -386,7 +419,6 @@ export class MethodGenerator extends GeneratorBase {
                                 type = 'enumArray';
                             }
                         }
-
                         const method = Helper.getSerializeUtilMethodByType(type, name, param.paramSize, param.disposition);
                         Helper.writeLines(`const ${param.paramName}Bytes = ${method}`, bodyLines);
                         Helper.writeLines(`newArray = Utils.concatTypedArrays(newArray, ${param.paramName}Bytes);`, bodyLines);
