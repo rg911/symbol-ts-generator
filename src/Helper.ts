@@ -1,6 +1,7 @@
 import * as fs from 'fs-extra';
-import { BuildInType, DispositionType, GeneratedBuildInType } from './Enums';
+import { BuildInType, ConditionType, DispositionType, GeneratedBuildInType } from './Enums';
 import { Layout } from './interface/layout';
+import { Parameter } from './interface/parameter';
 import LineByLine = require('n-readlines');
 import path = require('path');
 export class Helper {
@@ -149,11 +150,62 @@ export class Helper {
 
     /**
      * Check if layout attribute is conditional
-     * @param type - layout attribute
+     * @param condition - condition attribute
      * @returns true if layout attribute is conditional
      */
-    public static isConditional(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.Array.valueOf() && layout.condition !== undefined;
+    public static isConditional(condition?: string): boolean {
+        return condition !== undefined;
+    }
+
+    /**
+     * Check if layout attribute is equal kind condition
+     * @param condition - condition attribute
+     * @param operation - condition operation
+     * @returns true if layout attribute is equal kind condition
+     */
+    public static isEqualKindCondition(condition?: string, operation?: string): boolean {
+        return (
+            operation !== undefined &&
+            Helper.isConditional(condition) &&
+            [ConditionType.Equals.valueOf(), ConditionType.NotEquals.valueOf()].includes(operation)
+        );
+    }
+
+    /**
+     * Check if layout attribute is array kind condition
+     * @param condition - condition attribute
+     * @param operation - condition operation
+     * @returns true if layout attribute is array kind condition
+     */
+    public static isArrayKindCondition(condition?: string, operation?: string): boolean {
+        return operation !== undefined && Helper.isConditional(condition) && operation === ConditionType.In.valueOf();
+    }
+
+    /**
+     * Check if layout attribute is size condition
+     * @param condition - condition attribute
+     * @returns true if layout attribute is size condition
+     */
+    public static isSizeCondition(condition?: string): boolean {
+        return condition !== undefined && condition?.endsWith('_size');
+    }
+
+    /**
+     * Is EmbeddedTransaction type
+     * @param type - parameter type
+     * @returns if the parameter type is EmbeddedTransaction
+     */
+    public static isEmbeddedTransaction(type: string): boolean {
+        return Helper.stripArrayType(type) === 'EmbeddedTransaction';
+    }
+
+    /**
+     * get deserialize method array alignment
+     * @param type - parameter type
+     * @returns deserialize method array alignment
+     */
+    public static getArrayDeserializeAlignment(type: string): number {
+        return Helper.stripArrayType(type) === 'EmbeddedTransaction' ? 8 : 0;
     }
 
     /**
@@ -294,6 +346,35 @@ export class Helper {
     }
 
     /**
+     * Get condition lines based on condition operation type
+     * @param param - current parameter
+     * @param conditionParamType - condition parameter
+     * @param localVar - is declaring local var or not
+     * @returns typescript condition lines
+     */
+    public static getConditionLine(param: Parameter, conditionParamType: string, localVar = false): string {
+        const varPrefix = localVar ? '' : 'this.';
+        const value =
+            conditionParamType === GeneratedBuildInType.Number ? param.condition_value : `${conditionParamType}.${param.condition_value}`;
+        let varName = `${varPrefix}${Helper.toCamel(param.condition)}`;
+        if (Helper.isSizeCondition(param.condition) && !param.actualSize) {
+            if (Helper.shouldGenerateClass(param.type)) {
+                varName = `${varPrefix}${param.generatedName}.size`;
+            }
+        }
+        switch (param.condition_operation) {
+            case ConditionType.In.valueOf():
+                return `if (${varName}.indexOf(${value}) > -1) {`;
+            case ConditionType.Equals.valueOf():
+                return `if (${varName} === ${value}) {`;
+            case ConditionType.NotEquals.valueOf():
+                return `if (${varName} !== ${value}) {`;
+            default:
+                return '';
+        }
+    }
+
+    /**
      * Detect and add import names to a list
      * @param importList - existing import list
      * @param type - type
@@ -352,7 +433,7 @@ export class Helper {
         if (Helper.isConst(disposition) || Helper.isReserved(disposition) || name === 'size') {
             return false;
         }
-        if (name.endsWith('Count') || name.endsWith('Size')) {
+        if (name.endsWith('_count') || name.endsWith('_size')) {
             if (layouts.find((layout) => layout.size && layout.size === name)) {
                 return false;
             }
@@ -391,5 +472,29 @@ export class Helper {
             licenseLines.push(line.toString());
         }
         return licenseLines;
+    }
+
+    /**
+     * Wrap declaration line if it is too long
+     * @param prefix - prefix
+     * @param body - body
+     * @param suffix - suffix
+     * @param baseIndentCount - parent indentation count
+     * @returns wrapped declaration lines
+     */
+    public static wrapLines(prefix: string, body: string, suffix: string, baseIndentCount: number): string[] {
+        const generatedLines: string[] = [];
+        const singleLine = prefix + body + suffix;
+        if (singleLine.length > 140) {
+            Helper.writeLines(prefix.trimEnd(), generatedLines);
+            Helper.writeLines(
+                body.split(', ').map((line) => Helper.indent(line + ',', baseIndentCount + 1)),
+                generatedLines,
+            );
+            Helper.writeLines(Helper.indent(suffix.trim(), baseIndentCount), generatedLines);
+        } else {
+            generatedLines.push(singleLine);
+        }
+        return generatedLines;
     }
 }

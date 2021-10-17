@@ -28,7 +28,7 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`constructor(${params[0].generatedName}: ${params[0].type}) {`, 1), generatedLines);
         } else {
             Helper.writeLines(
-                this.wrapMethodDeclarationLines(
+                Helper.wrapLines(
                     Helper.indent('constructor({ ', 1),
                     this.flattenedInlineParameters
                         .filter((param) => param.declarable)
@@ -110,7 +110,7 @@ export class MethodGenerator extends GeneratorBase {
             );
         } else {
             Helper.writeLines(
-                this.wrapMethodDeclarationLines(
+                Helper.wrapLines(
                     Helper.indent(`return new ${this.classSchema.name}({ `, 2),
                     this.flattenedInlineParameters
                         .filter((param) => param.declarable)
@@ -173,13 +173,13 @@ export class MethodGenerator extends GeneratorBase {
      */
     private getGetterLines(params: Parameter[], superClass?: string): string[] {
         const generatedLines: string[] = [];
-        if (params.length === 1 && !params[0].disposition?.endsWith('array')) {
+        if (params.length === 1 && !Helper.isArray(params[0].disposition)) {
             Helper.writeLines(Helper.indent(`return ${params[0].actualSize};`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`let size = 0;`, 2), generatedLines);
             let sizeLine = '';
             params
-                .filter((param) => param.disposition !== 'const')
+                .filter((param) => !Helper.isConst(param.disposition))
                 .forEach((param) => {
                     if (superClass && superClass === param.type) {
                         sizeLine = 'super.size';
@@ -188,7 +188,7 @@ export class MethodGenerator extends GeneratorBase {
                         if (!param.actualSize) {
                             if (Helper.shouldGenerateClass(param.type)) {
                                 if (parentSchema && Helper.isEnum(parentSchema.type)) {
-                                    sizeLine = parentSchema.size?.toString() ?? '';
+                                    sizeLine = (parentSchema.size as number).toString();
                                 } else {
                                     sizeLine = `this.${param.generatedName}${param.condition ? '!' : ''}.size`;
                                 }
@@ -209,7 +209,7 @@ export class MethodGenerator extends GeneratorBase {
                                 sizeMethod = `.reduce((sum) => sum + ${parentSchema.size}, 0)`;
                             }
 
-                            sizeLine = `this.${Helper.toCamel(param.name ?? '')}${sizeMethod}`;
+                            sizeLine = `this.${param.generatedName}${sizeMethod}`;
                         }
                     }
                     Helper.writeLines(
@@ -237,9 +237,9 @@ export class MethodGenerator extends GeneratorBase {
         } else {
             Helper.writeLines(Helper.indent(`const byteArray = Array.from(payload);`, 2), generatedLines);
             const appliedPlaceholder: string[] = [];
-            const bottomConditionLines: string[] = [];
+            const bottomConditionLines: string[] = []; // Conditions need to be placed at the rear of the deserialize block in TS
             params
-                .filter((param) => param.disposition !== 'const')
+                .filter((param) => !Helper.isConst(param.disposition))
                 .forEach((param) => {
                     if (superClass && superClass === param.type) {
                         Helper.writeLines(
@@ -264,14 +264,15 @@ export class MethodGenerator extends GeneratorBase {
 
                         let bodyLine = [`${param.condition ? '' : 'const '}${param.generatedName} = ${method}`];
                         // Handle Reserved
-                        if ((param.disposition && param.disposition === 'reserved') || Helper.isConst(param.disposition)) {
+                        if (Helper.isReserved(param.disposition)) {
                             bodyLine = [method];
                         }
                         //Handle array
                         if (Helper.isArray(param.disposition)) {
+                            const isEmbeddedTransaction = Helper.isEmbeddedTransaction(param.type);
                             let reduceLine = `${param.generatedName}.reduce((sum, c) => sum + c.size, 0),`;
+                            // Fill Array / Sized Array
                             if (Helper.isFillArray(param.disposition) || Helper.isSizedArray(param.disposition)) {
-                                const isEmbeddedTransaction = param.type === 'EmbeddedTransaction[]';
                                 bodyLine = [`const ${param.generatedName}: ${param.type} = Utils.deserializeRemaining(`];
                                 bodyLine.push(
                                     Helper.indent(
@@ -288,11 +289,13 @@ export class MethodGenerator extends GeneratorBase {
                                         1,
                                     ),
                                 );
-                                bodyLine.push(Helper.indent(`${isEmbeddedTransaction ? '8' : '0'},`, 1));
+                                bodyLine.push(Helper.indent(`${Helper.getArrayDeserializeAlignment(param.type)},`, 1));
                                 bodyLine.push(');');
-                                reduceLine = `${param.generatedName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${
-                                    isEmbeddedTransaction ? '8' : '0'
-                                }), 0),`;
+                                reduceLine = `${
+                                    param.generatedName
+                                }.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${Helper.getArrayDeserializeAlignment(
+                                    param.type,
+                                )}), 0),`;
                             } else if (param.size) {
                                 if (param.type === 'Uint8Array') {
                                     bodyLine = [
@@ -311,7 +314,8 @@ export class MethodGenerator extends GeneratorBase {
                                         bodyLine.push(');');
                                         reduceLine = `${param.generatedName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
                                     } else {
-                                        if (param.type === 'EmbeddedTransaction[]') {
+                                        if (isEmbeddedTransaction) {
+                                            // If embedded transaction, user the helper
                                             bodyLine = [`const ${param.generatedName}: ${param.type} = Utils.deserializeRemaining(`];
                                             bodyLine.push(Helper.indent(`EmbeddedTransactionHelper.deserialize,`, 1));
                                             bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
@@ -336,13 +340,12 @@ export class MethodGenerator extends GeneratorBase {
                             arraySpliceLine.push(');');
                             spliceLines = arraySpliceLine;
                         }
-
+                        // Condition place holder
                         if (this.checkIfPlaceholderConditionLineNeeded(param, params)) {
                             if (!appliedPlaceholder.find((placeholder) => placeholder === param.condition)) {
                                 Helper.writeLines(this.getDeserializeConditionPlaceHolder(param), generatedLines);
                                 appliedPlaceholder.push(param.condition ?? '');
                             }
-
                             bottomConditionLines.push(
                                 ...this.getBottomConditionBodyLines(param, params, Helper.toCamel(param.condition ?? '') + 'Bytes'),
                             );
@@ -366,13 +369,13 @@ export class MethodGenerator extends GeneratorBase {
      */
     private getParamSerializeLines(params: Parameter[], superClass?: string): string[] {
         const generatedLines: string[] = [];
-        if (params.length === 1 && !params[0].disposition?.endsWith('array')) {
+        if (params.length === 1 && !Helper.isArray(params[0].disposition)) {
             const method = Helper.getSerializeUtilMethodByType(params[0].type, 'this.' + params[0].generatedName, params[0].actualSize);
             Helper.writeLines(Helper.indent(`return ${method}`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`let newArray = new Uint8Array();`, 2), generatedLines);
             params
-                .filter((param) => param.disposition !== 'const')
+                .filter((param) => !Helper.isConst(param.disposition))
                 .forEach((param) => {
                     if (superClass && superClass === param.type) {
                         Helper.writeLines(Helper.indent(`const superBytes = super.serialize();`, 2), generatedLines);
@@ -448,31 +451,15 @@ export class MethodGenerator extends GeneratorBase {
         params: Parameter[],
         bodyLines: string[],
         indentCount: number,
-        useLocal = false,
+        localVar = false,
         declareUndefined = false,
     ): string[] {
         const lines: string[] = [];
-        const accessor = useLocal ? '' : 'this.'; // Use local/global var
         if (param.condition) {
-            const conditionType = params
-                .find((condition) => condition.name && condition.name === param.condition)
-                ?.type.replace('[', '')
-                .replace(']', '');
-            let conditionLine = '';
-            const conditionValue = conditionType === 'number' ? param.condition_value : `${conditionType}.${param.condition_value}`;
-            let conditionLeftPart = `${accessor}${Helper.toCamel(param.condition ?? '')}`;
-            if (param.condition.endsWith('_size') && !param.actualSize) {
-                if (Helper.shouldGenerateClass(param.type)) {
-                    conditionLeftPart = `${accessor}${param.generatedName}.size`;
-                }
-            }
-            if (param.condition_operation === 'in') {
-                conditionLine = `if (${conditionLeftPart}.indexOf(${conditionValue}) > -1) {`;
-            } else if (param.condition_operation === 'equals') {
-                conditionLine = `if (${conditionLeftPart} === ${conditionValue}) {`;
-            } else if (param.condition_operation === 'not equals') {
-                conditionLine = `if (${conditionLeftPart} !== ${conditionValue}) {`;
-            }
+            const conditionParamType = Helper.stripArrayType(
+                params.find((condition) => condition.name && condition.name === param.condition)?.type ?? '',
+            );
+            const conditionLine = Helper.getConditionLine(param, conditionParamType, localVar);
 
             if (declareUndefined) {
                 Helper.writeLines(Helper.indent(`let ${param.generatedName}: ${param.type} | undefined;`, indentCount), lines);
@@ -488,30 +475,6 @@ export class MethodGenerator extends GeneratorBase {
             });
         }
         return lines;
-    }
-
-    /**
-     * Wrap declaration line if it is too long
-     * @param prefix - prefix
-     * @param body - body
-     * @param suffix - suffix
-     * @param baseIndentCount - parent indentation count
-     * @returns wrapped declaration lines
-     */
-    private wrapMethodDeclarationLines(prefix: string, body: string, suffix: string, baseIndentCount: number): string[] {
-        const generatedLines: string[] = [];
-        const singleLine = prefix + body + suffix;
-        if (singleLine.length > 140) {
-            Helper.writeLines(prefix.trimEnd(), generatedLines);
-            Helper.writeLines(
-                body.split(', ').map((line) => Helper.indent(line + ',', baseIndentCount + 1)),
-                generatedLines,
-            );
-            Helper.writeLines(Helper.indent(suffix.trim(), baseIndentCount), generatedLines);
-        } else {
-            generatedLines.push(singleLine);
-        }
-        return generatedLines;
     }
 
     /**
@@ -535,7 +498,7 @@ export class MethodGenerator extends GeneratorBase {
      * @returns place holder lines
      */
     private getDeserializeConditionPlaceHolder(param: Parameter): string[] {
-        if (param.condition && param.condition_operation?.endsWith('equals')) {
+        if (Helper.isEqualKindCondition(param.condition, param.condition_operation)) {
             const generatedName = Helper.toCamel(param.condition) + 'Bytes';
             const parentParam = this.schema.find((schema) => schema.name === param.type);
             if (parentParam) {

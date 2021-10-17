@@ -18,3 +18,9 @@ export enum GeneratedBuildInType {
     Number = 'number',
     BigInt = 'bigint',
 }
+
+export enum ConditionType {
+    Equals = 'equals',
+    In = 'in',
+    NotEquals = 'not equals',
+}
