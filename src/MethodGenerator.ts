@@ -28,7 +28,7 @@ export class MethodGenerator extends GeneratorBase {
             Helper.writeLines(Helper.indent(`constructor(${params[0].generatedName}: ${params[0].type}) {`, 1), generatedLines);
         } else {
             Helper.writeLines(
-                Helper.wrapLines(
+                this.wrapLines(
                     Helper.indent('constructor({ ', 1),
                     this.flattenedInlineParameters
                         .filter((param) => param.declarable)
@@ -110,7 +110,7 @@ export class MethodGenerator extends GeneratorBase {
             );
         } else {
             Helper.writeLines(
-                Helper.wrapLines(
+                this.wrapLines(
                     Helper.indent(`return new ${this.classSchema.name}({ `, 2),
                     this.flattenedInlineParameters
                         .filter((param) => param.declarable)
@@ -232,7 +232,7 @@ export class MethodGenerator extends GeneratorBase {
         const generatedLines: string[] = [];
         let argument = 'Uint8Array.from(payload)';
         if (params.length === 1 && !params[0].disposition?.endsWith('array')) {
-            const method = Helper.getDeserializeUtilMethodByType(params[0].type, argument, params[0].actualSize);
+            const method = this.getDeserializeUtilMethodByType(params[0].type, argument, params[0].actualSize);
             Helper.writeLines(Helper.indent(`const ${params[0].generatedName} = ${method}`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`const byteArray = Array.from(payload);`, 2), generatedLines);
@@ -260,7 +260,7 @@ export class MethodGenerator extends GeneratorBase {
                         argument = 'Uint8Array.from(byteArray)';
                         // Handle enum
                         const type = parentSchema && Helper.isEnum(parentSchema.type) ? 'enum' : param.type;
-                        const method = Helper.getDeserializeUtilMethodByType(type, argument, param.actualSize);
+                        const method = this.getDeserializeUtilMethodByType(type, argument, param.actualSize);
 
                         let bodyLine = [`${param.condition ? '' : 'const '}${param.generatedName} = ${method}`];
                         // Handle Reserved
@@ -370,7 +370,7 @@ export class MethodGenerator extends GeneratorBase {
     private getParamSerializeLines(params: Parameter[], superClass?: string): string[] {
         const generatedLines: string[] = [];
         if (params.length === 1 && !Helper.isArray(params[0].disposition)) {
-            const method = Helper.getSerializeUtilMethodByType(params[0].type, 'this.' + params[0].generatedName, params[0].actualSize);
+            const method = this.getSerializeUtilMethodByType(params[0].type, 'this.' + params[0].generatedName, params[0].actualSize);
             Helper.writeLines(Helper.indent(`return ${method}`, 2), generatedLines);
         } else {
             Helper.writeLines(Helper.indent(`let newArray = new Uint8Array();`, 2), generatedLines);
@@ -396,7 +396,7 @@ export class MethodGenerator extends GeneratorBase {
                             const parentParam = params.find((parent) => param.name && parent.size === param.name);
                             if (parentParam) {
                                 if (parentParam.disposition === 'array sized') {
-                                    const sizedArrayMethod = Helper.getSerializeUtilMethodByType(
+                                    const sizedArrayMethod = this.getSerializeUtilMethodByType(
                                         'arraySize',
                                         `this.${parentParam.generatedName}`,
                                         parentParam.type === 'EmbeddedTransaction[]' ? 8 : 0,
@@ -425,7 +425,7 @@ export class MethodGenerator extends GeneratorBase {
                                 type = 'enumArray';
                             }
                         }
-                        const method = Helper.getSerializeUtilMethodByType(type, name, param.actualSize, param.disposition);
+                        const method = this.getSerializeUtilMethodByType(type, name, param.actualSize, param.disposition);
                         Helper.writeLines(`const ${param.generatedName}Bytes = ${method}`, bodyLines);
                         Helper.writeLines(`newArray = Utils.concatTypedArrays(newArray, ${param.generatedName}Bytes);`, bodyLines);
                         Helper.writeLines(this.applyCondition(param, params, bodyLines, 2), generatedLines);
@@ -459,7 +459,7 @@ export class MethodGenerator extends GeneratorBase {
             const conditionParamType = Helper.stripArrayType(
                 params.find((condition) => condition.name && condition.name === param.condition)?.type ?? '',
             );
-            const conditionLine = Helper.getConditionLine(param, conditionParamType, localVar);
+            const conditionLine = this.getConditionLine(param, conditionParamType, localVar);
 
             if (declareUndefined) {
                 Helper.writeLines(Helper.indent(`let ${param.generatedName}: ${param.type} | undefined;`, indentCount), lines);
@@ -504,7 +504,7 @@ export class MethodGenerator extends GeneratorBase {
             if (parentParam) {
                 return [
                     Helper.indent(
-                        `const ${generatedName} = ${Helper.getDeserializeUtilMethodByType(
+                        `const ${generatedName} = ${this.getDeserializeUtilMethodByType(
                             'Uint8Array',
                             'Uint8Array.from(byteArray)',
                             parentParam.size,

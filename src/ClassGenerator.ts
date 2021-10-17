@@ -103,7 +103,7 @@ export class ClassGenerator extends GeneratorBase {
                 params.push({
                     generatedName,
                     actualSize,
-                    declarable: Helper.shouldDeclareVariable(layout.name ?? '', schema.layout, layout.disposition),
+                    declarable: this.shouldDeclareVariable(layout.name ?? '', schema.layout, layout.disposition),
                     inlineClass: '',
                     ...layout,
                 });
@@ -132,7 +132,7 @@ export class ClassGenerator extends GeneratorBase {
             const param = {
                 generatedName,
                 actualSize,
-                declarable: Helper.shouldDeclareVariable(layout.name ?? layout.type, schema.layout, layout.disposition),
+                declarable: this.shouldDeclareVariable(layout.name ?? layout.type, schema.layout, layout.disposition),
                 inlineClass: '',
                 ...layout,
             };
@@ -159,7 +159,7 @@ export class ClassGenerator extends GeneratorBase {
                     const parsedParam = {
                         generatedName,
                         actualSize,
-                        declarable: Helper.shouldDeclareVariable(param.name ?? '', schema.layout, param.disposition),
+                        declarable: this.shouldDeclareVariable(param.name ?? '', schema.layout, param.disposition),
                         inlineClass: '',
                         ...param,
                     };
