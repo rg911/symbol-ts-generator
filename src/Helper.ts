@@ -1,16 +1,36 @@
 import * as fs from 'fs-extra';
-import { BuildInType, DispositionType } from './Enums';
+import { BuildInType, DispositionType, GeneratedBuildInType } from './Enums';
 import { Layout } from './interface/layout';
 import LineByLine = require('n-readlines');
 import path = require('path');
 export class Helper {
+    public static ARRAY_TYPES = [
+        DispositionType.Array.valueOf(),
+        DispositionType.ArrayFill.valueOf(),
+        DispositionType.ArraySized.valueOf(),
+    ];
+
+    public static GENERATED_BUILD_IN_TYPE = [
+        GeneratedBuildInType.BigInt.valueOf(),
+        GeneratedBuildInType.Number.valueOf(),
+        GeneratedBuildInType.Uint8Array.valueOf(),
+    ];
+
+    /**
+     * Classes which should not be generated
+     */
+    public static EXCLUDED_CLASS = ['SizePrefixedEntity', 'VerifiableEntity', 'EntityBody', 'EmbeddedTransactionHeader'];
+
     /**
      * Convert string name from snake_case, kebab-case, PascalCase to camel case.
      *
      * @param value - Input string
      * @returns camel case string
      */
-    public static toCamel(value: string): string {
+    public static toCamel(value?: string): string {
+        if (!value) {
+            return '';
+        }
         return value
             .replace(/\s(.)/g, function ($1) {
                 return $1.toUpperCase();
@@ -53,56 +73,56 @@ export class Helper {
 
     /**
      * Check if layout attribute is inline
-     * @param type - layout attribute
+     * @param disposition - layout attribute
      * @returns true if layout attribute is inline
      */
-    public static isInline(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.Inline.valueOf();
+    public static isInline(disposition?: string): boolean {
+        return disposition !== undefined && disposition === DispositionType.Inline.valueOf();
     }
 
     /**
      * Check if layout attribute is const
-     * @param type - layout attribute
+     * @param disposition - layout attribute
      * @returns true if layout attribute is const
      */
-    public static isConst(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.Const.valueOf();
+    public static isConst(disposition?: string): boolean {
+        return disposition !== undefined && disposition === DispositionType.Const.valueOf();
     }
 
     /**
      * Check if layout attribute is array
-     * @param type - layout attribute
+     * @param disposition - layout disposition
      * @returns true if layout attribute is array
      */
-    public static isArray(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.Array.valueOf();
+    public static isArray(disposition?: string): boolean {
+        return disposition !== undefined && Helper.ARRAY_TYPES.includes(disposition);
     }
 
     /**
      * Check if layout attribute is reserved
-     * @param type - layout attribute
+     * @param disposition - layout attribute
      * @returns true if layout attribute is reserved
      */
-    public static isReserved(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.Reserved.valueOf();
+    public static isReserved(disposition?: string): boolean {
+        return disposition !== undefined && disposition === DispositionType.Reserved.valueOf();
     }
 
     /**
      * Check if layout attribute is fill array
-     * @param type - layout attribute
+     * @param disposition - layout attribute
      * @returns true if layout attribute is fill array
      */
-    public static isFillArray(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.ArrayFill.valueOf();
+    public static isFillArray(disposition?: string): boolean {
+        return disposition !== undefined && disposition === DispositionType.ArrayFill.valueOf();
     }
 
     /**
      * Check if layout attribute is sized array
-     * @param type - layout attribute
+     * @param disposition - layout attribute
      * @returns true if layout attribute is sized array
      */
-    public static isSizedArray(layout: Layout): boolean {
-        return layout.disposition !== undefined && layout.disposition === DispositionType.ArraySized.valueOf();
+    public static isSizedArray(disposition?: string): boolean {
+        return disposition !== undefined && disposition === DispositionType.ArraySized.valueOf();
     }
 
     /**
@@ -137,22 +157,10 @@ export class Helper {
     }
 
     /**
-     * Return true is disposition is an array type
-     * @param disposition -  disposition
-     * @returns disposition is an array
-     */
-    public static isArrayDisposition(disposition?: string): boolean {
-        if (disposition && ['array', 'array fill', 'array sized'].includes(disposition)) {
-            return true;
-        }
-        return false;
-    }
-
-    /**
      * Return base type of an array
      * @param arrayType - param array type
      */
-    public static getArrayKind(arrayType: string): string {
+    public static stripArrayType(arrayType: string): string {
         return arrayType.replace('[', '').replace(']', '');
     }
 
@@ -199,11 +207,7 @@ export class Helper {
                 return 'Uint8Array';
             }
         }
-        const arrayType = ['array', 'array fill', 'array sized'];
-        if (arrayType.includes(type) || type.endsWith('Flags')) {
-            return `${type}[]`;
-        }
-        if (disposition && (arrayType.includes(disposition) || disposition.endsWith('Flags'))) {
+        if (Helper.isArray(type) || Helper.isArray(disposition) || type.endsWith('Flags') || disposition?.endsWith('Flags')) {
             return `${type}[]`;
         }
         return type;
@@ -217,7 +221,7 @@ export class Helper {
      * @returns deserializer method name
      */
     public static getDeserializeUtilMethodByType(type: string, argName: string, size?: number): string {
-        type = Helper.getArrayKind(type);
+        type = Helper.stripArrayType(type);
         switch (type) {
             case 'Uint8Array':
                 return `Utils.getBytes(${argName}, ${size});`;
@@ -254,7 +258,7 @@ export class Helper {
      * @returns serializer method text
      */
     public static getSerializeUtilMethodByType(type: string, name: string, size?: number, disposition?: string): string {
-        type = Helper.getArrayKind(type);
+        type = Helper.stripArrayType(type);
         switch (type) {
             case 'Uint8Array':
                 return `${name};`;
@@ -274,7 +278,7 @@ export class Helper {
             case 'arraySize':
                 return `${name}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${size}), 0);`;
             default:
-                if (Helper.isArrayDisposition(disposition)) {
+                if (Helper.isArray(disposition)) {
                     return `Utils.writeList(${name}, ${type === 'EmbeddedTransaction' ? '8' : '0'});`;
                 }
                 if (type.endsWith('Flags')) {
@@ -294,11 +298,13 @@ export class Helper {
      * @param importList - existing import list
      * @param type - type
      * @param name - name
+     * @param disposition - disposition
      */
-    public static addRequiredImport(importList: string[], type: string, name: string): void {
-        if (type !== name && !Helper.isByte(type) && !['Uint8Array', 'number', 'bigint'].includes(type)) {
-            if (!importList.includes(Helper.getArrayKind(type))) {
-                importList.push(Helper.getArrayKind(type));
+    public static addRequiredImport(importList: string[], type: string, name: string, disposition?: string): void {
+        type = Helper.stripArrayType(type);
+        if (type !== name && !Helper.isByte(type) && !Helper.isConst(disposition) && !Helper.GENERATED_BUILD_IN_TYPE.includes(type)) {
+            if (!importList.includes(type)) {
+                importList.push(type);
             }
         }
     }
@@ -309,26 +315,50 @@ export class Helper {
      * @returns should generate class or not
      */
     public static shouldGenerateClass(name: string): boolean {
-        return !['SizePrefixedEntity', 'VerifiableEntity', 'EntityBody', 'EmbeddedTransactionHeader'].includes(name);
+        return !Helper.EXCLUDED_CLASS.includes(name);
+    }
+
+    /**
+     * Get generated schema name
+     * @param name - schema name
+     * @param disposition - parameter disposition
+     * @returns generated name
+     */
+    public static getGeneratedName(name?: string, disposition?: string): string {
+        if (!name) {
+            return '';
+        }
+        return Helper.isConst(disposition) ? name : Helper.toCamel(name); // Keep const name as it is
+    }
+
+    /**
+     * Parameter comments sanitizer
+     * @param name - param name
+     * @param comments - param comments
+     * @returns sanitized comments: if undefined use the param name
+     */
+    public static sanitizeComment(name: string, comments?: string): string {
+        return comments ? comments : name;
     }
 
     /**
      * Should declare variable or not
-     * @param name - variable name
-     * @param isConstant - variable is constant
+     * @param name - name
+     * @param disposition - parameter disposition
      * @returns should declare variable or not
      */
-    public static shouldDeclareVariable(name: string, isConstant: boolean, layouts: Layout[]): boolean {
-        if (isConstant) {
+    public static shouldDeclareVariable(name: string, layouts: Layout[], disposition?: string): boolean {
+        // ignore constant, reserved and size
+        if (Helper.isConst(disposition) || Helper.isReserved(disposition) || name === 'size') {
             return false;
         }
-        if (name.endsWith('_count') || name.endsWith('_size')) {
+        if (name.endsWith('Count') || name.endsWith('Size')) {
             if (layouts.find((layout) => layout.size && layout.size === name)) {
                 return false;
             }
             return true;
         }
-        return !(name === 'size' || name.indexOf('_reserved') > -1);
+        return true;
     }
 
     /**

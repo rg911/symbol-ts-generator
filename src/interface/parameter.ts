@@ -1,9 +1,9 @@
 import { Layout } from './layout';
 
 export interface Parameter extends Layout {
-    paramName: string;
+    generatedName: string;
     type: string;
-    paramSize?: number;
+    actualSize?: number;
     declarable: boolean;
     inlineClass: string;
 }

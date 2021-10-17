@@ -70,7 +70,9 @@ export class GeneratorBase {
      * @returns actual size of a type
      */
     public getRealLayoutSize(layout: Layout): number | undefined {
-        if (layout.size && typeof layout.size === 'number') {
+        if (typeof layout.size === 'string') {
+            return undefined;
+        } else if (layout.size && typeof layout.size === 'number') {
             return layout.size;
         } else {
             const parentSchema = this.schema.find((schema) => schema.name === layout.type);

@@ -12,3 +12,9 @@ export enum DispositionType {
     ArraySized = 'array sized',
     Reserved = 'reserved',
 }
+
+export enum GeneratedBuildInType {
+    Uint8Array = 'Uint8Array',
+    Number = 'number',
+    BigInt = 'bigint',
+}
