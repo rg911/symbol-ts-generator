@@ -82,7 +82,7 @@ export class TransactionHelperGenerator {
     private generateDeserializeLines(transactionName: string, transactionType: string, transactionVersion: number): string[] {
         const generatedLines: string[] = [];
         Helper.writeLines(
-            Helper.indent(`if (header.type === TransactionType.${transactionType} && header.version === ${transactionVersion}){`, 2),
+            Helper.indent(`if (header.type === TransactionType.${transactionType} && header.version === ${transactionVersion}) {`, 2),
             generatedLines,
         );
         Helper.writeLines(Helper.indent(`return ${transactionName}.deserialize(payload);`, 3), generatedLines);
