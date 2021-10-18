@@ -53,7 +53,13 @@ export class MethodGenerator extends GeneratorBase {
                         Helper.writeLines(Helper.indent(`super(${paramLine});`, 2), generatedLines);
                     } else {
                         Helper.writeLines(
-                            Helper.indent(`this.${param.generatedName} = new ${param.type}(${paramLine});`, 2),
+                            // Helper.indent(`this.${param.generatedName} = new ${param.type}(${paramLine});`, 2),
+                            this.wrapLines(
+                                Helper.indent(`this.${param.generatedName} = new ${param.type}(${inlineParams.length > 1 ? '{ ' : ''}`, 2),
+                                inlineParams.join(', '),
+                                `${inlineParams.length > 1 ? ' }' : ''});`,
+                                2,
+                            ),
                             generatedLines,
                         );
                     }
@@ -270,7 +276,7 @@ export class MethodGenerator extends GeneratorBase {
                         //Handle array
                         if (Helper.isArray(param.disposition)) {
                             const isEmbeddedTransaction = Helper.isEmbeddedTransaction(param.type);
-                            let reduceLine = `${param.generatedName}.reduce((sum, c) => sum + c.size, 0),`;
+                            let reduceLine = `${param.generatedName}.reduce((sum, c) => sum + c.size, 0)`;
                             // Fill Array / Sized Array
                             if (Helper.isFillArray(param.disposition) || Helper.isSizedArray(param.disposition)) {
                                 bodyLine = [`const ${param.generatedName}: ${param.type} = Utils.deserializeRemaining(`];
@@ -295,7 +301,7 @@ export class MethodGenerator extends GeneratorBase {
                                     param.generatedName
                                 }.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, ${Helper.getArrayDeserializeAlignment(
                                     param.type,
-                                )}), 0),`;
+                                )}), 0)`;
                             } else if (param.size) {
                                 if (param.type === 'Uint8Array') {
                                     bodyLine = [
@@ -303,42 +309,52 @@ export class MethodGenerator extends GeneratorBase {
                                             param.size?.toString(),
                                         )});`,
                                     ];
-                                    reduceLine = `${Helper.toCamel(param.size?.toString())},`;
+                                    reduceLine = `${Helper.toCamel(param.size?.toString())}`;
                                 } else {
                                     const parentSchema = this.schema.find((schema) => schema.name === Helper.stripArrayType(param.type));
                                     if (parentSchema && Helper.isEnum(parentSchema.type)) {
-                                        bodyLine = [`const ${param.generatedName} = Utils.deserializeEnums(`];
-                                        bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                        bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
-                                        bodyLine.push(Helper.indent(`${parentSchema.size},`, 1));
-                                        bodyLine.push(');');
-                                        reduceLine = `${param.generatedName}.reduce((sum) => sum + ${parentSchema.size}, 0),`;
+                                        bodyLine = this.wrapLines(
+                                            `const ${param.generatedName} = Utils.deserializeEnums(`,
+                                            [
+                                                'Uint8Array.from(byteArray)',
+                                                `${Helper.toCamel(param.size?.toString())}`,
+                                                `${parentSchema.size}`,
+                                            ].join(', '),
+                                            ');',
+                                            0,
+                                        );
+                                        reduceLine = `${param.generatedName}.reduce((sum) => sum + ${parentSchema.size}, 0)`;
                                     } else {
                                         if (isEmbeddedTransaction) {
                                             // If embedded transaction, user the helper
-                                            bodyLine = [`const ${param.generatedName}: ${param.type} = Utils.deserializeRemaining(`];
-                                            bodyLine.push(Helper.indent(`EmbeddedTransactionHelper.deserialize,`, 1));
-                                            bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                            bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
-                                            bodyLine.push(Helper.indent('8', 1));
-                                            bodyLine.push(');');
-                                            reduceLine = `${param.generatedName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 8), 0),`;
+                                            bodyLine = this.wrapLines(
+                                                `const ${param.generatedName}: ${param.type} = Utils.deserializeRemaining(`,
+                                                [
+                                                    `EmbeddedTransactionHelper.deserialize`,
+                                                    'Uint8Array.from(byteArray)',
+                                                    `${Helper.toCamel(param.size?.toString())}`,
+                                                    '8',
+                                                ].join(', '),
+                                                ');',
+                                                0,
+                                            );
+                                            reduceLine = `${param.generatedName}.reduce((sum, c) => sum + Utils.getSizeWithPadding(c.size, 8), 0)`;
                                         } else {
-                                            bodyLine = [`const ${param.generatedName} = Utils.deserialize(`];
-                                            bodyLine.push(Helper.indent(`${Helper.stripArrayType(param.type)}.deserialize,`, 1));
-                                            bodyLine.push(Helper.indent('Uint8Array.from(byteArray),', 1));
-                                            bodyLine.push(Helper.indent(`${Helper.toCamel(param.size?.toString())},`, 1));
-                                            bodyLine.push(');');
+                                            bodyLine = this.wrapLines(
+                                                `const ${param.generatedName} = Utils.deserialize(`,
+                                                [
+                                                    `${Helper.stripArrayType(param.type)}.deserialize`,
+                                                    'Uint8Array.from(byteArray)',
+                                                    `${Helper.toCamel(param.size?.toString())}`,
+                                                ].join(', '),
+                                                ');',
+                                                0,
+                                            );
                                         }
                                     }
                                 }
                             }
-                            const arraySpliceLine: string[] = [];
-                            arraySpliceLine.push('byteArray.splice(');
-                            arraySpliceLine.push(Helper.indent('0,', 1));
-                            arraySpliceLine.push(Helper.indent(reduceLine, 1));
-                            arraySpliceLine.push(');');
-                            spliceLines = arraySpliceLine;
+                            spliceLines = this.wrapLines('byteArray.splice(', ['0', reduceLine].join(', '), ');', 0);
                         }
                         // Condition place holder
                         if (this.checkIfPlaceholderConditionLineNeeded(param, params)) {
@@ -508,7 +524,7 @@ export class MethodGenerator extends GeneratorBase {
                             'Uint8Array',
                             'Uint8Array.from(byteArray)',
                             parentParam.size,
-                        )};`,
+                        )}`,
                         2,
                     ),
                     Helper.indent(`byteArray.splice(0, ${parentParam.size});`, 2),

@@ -309,7 +309,7 @@ export class Helper {
      * @returns sanitized comments: if undefined use the param name
      */
     public static sanitizeComment(name: string, comments?: string): string {
-        return comments ? comments : name;
+        return (comments ? comments : name).replace('\\', '*');
     }
 
     /**
